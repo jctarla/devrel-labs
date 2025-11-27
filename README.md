@@ -19,16 +19,7 @@ Welcome to DevRel Labs, a collection of AI solutions and tools built with Oracle
 - **Langflow Integration**: Visual workflow builder for AI agents
 - **Use Cases**: Financial advisor, customer service, business intelligence
 
-### 2. [Oracle RAG Applications](./apps/oracle-rag-applications/)
-**Building RAG Applications with Oracle Database 26ai**
-
-- **Vector Embeddings**: Native vector storage and search
-- **Document Processing**: Support for PDF, DOCX, TXT, and other formats
-- **Semantic Search**: Advanced similarity search using vector embeddings
-- **LLM Integration**: Seamless integration with various Large Language Models
-- **Use Cases**: Knowledge management, customer support, content creation
-
-### 3. [Oracle Select AI Insights](./apps/oracle-select-ai-insights/)
+### 2. [Oracle Select AI Insights](./apps/oracle-select-ai-insights/)
 **Talk with Industry-Specific Domain Data and Gain Insights Using Select AI**
 
 - **Natural Language Queries**: Ask questions in plain English
@@ -53,7 +44,7 @@ Welcome to DevRel Labs, a collection of AI solutions and tools built with Oracle
 - [OCI Subtitle Translation](./apps/oci-subtitle-translation/) - Automated subtitle translation
 - [OCI CSV-JSON Translation](./apps/oci-csv-json-translation/) - Data format conversion tools
 
-### Infrastructure & Deployment
+### DevOps & OKE
 - [NVIDIA NIM on OKE](./apps/nvidia-nim-oke/) - NVIDIA Inference Microservices on Oracle Container Engine
 - [Holoscan](./apps/holoscan/) - Holoscan applications and deployments
 - [Kubeflow on OKE](./kubeflow-oke-old/) - Machine learning workflows on Kubernetes
@@ -61,6 +52,39 @@ Welcome to DevRel Labs, a collection of AI solutions and tools built with Oracle
 ### Data & Analytics
 - [Data in AI Revolution](./workshops/data-in-ai-revolution/) - Data-driven AI solutions and insights
 - [RAG in a Box](./apps/rag_in_a_box/) - Retrieval-Augmented Generation solutions
+
+## 📁 Directory Contents
+
+### Apps Directory (`apps/`)
+
+- **[agentic_rag](./apps/agentic_rag/)** - Multi-agent RAG system with Chain-of-Thought reasoning using Oracle Database 26ai and local LLMs
+- **[holoscan](./apps/holoscan/)** - Terraform stack for deploying NVIDIA Holoscan on Oracle Linux A10 GPU instances
+- **[langflow-agentic-ai-oracle-mcp-vector-nl2sql](./apps/langflow-agentic-ai-oracle-mcp-vector-nl2sql/)** - Agentic AI workflows with Langflow, Oracle Database MCP, Vector RAG, and NL2SQL
+- **[langgraph_agent_with_genai](./apps/langgraph_agent_with_genai/)** - File indexing and conversational search using LangGraph and Oracle Generative AI
+- **[mongo-migration](./apps/mongo-migration/)** - Migration tools and solutions for moving MongoDB applications to Oracle Database
+- **[nvidia-nim-oke](./apps/nvidia-nim-oke/)** - Deploying NVIDIA Inference Microservices on Oracle Kubernetes Engine with GPU support
+- **[oci-csv-json-translation](./apps/oci-csv-json-translation/)** - Translate specific columns in CSV files or keys in JSON documents using OCI Language
+- **[oci-language-multiple-translation](./apps/oci-language-multiple-translation/)** - Bulk translation of multiple documents from OCI Object Storage buckets
+- **[oci-language-translation](./apps/oci-language-translation/)** - Multi-language translation services for documents and text using OCI Language
+- **[oci-subtitle-translation](./apps/oci-subtitle-translation/)** - Transcribe audio files and translate subtitles using OCI Speech and Language services
+- **[OJET (VDOM) - OCI Vision](./apps/OJET%20(VDOM)%20-%20OCI%20Vision/)** - Oracle JET Virtual DOM application with OCI Vision integration for image analysis
+- **[oracle-mcp-ai-agents](./apps/oracle-mcp-ai-agents/)** - Building AI agents with Model Context Protocol (MCP) and Oracle Database 26ai
+- **[oracle-rag-applications](./apps/oracle-rag-applications/)** - Building RAG applications with Oracle Database 26ai for document processing and semantic search
+- **[oracle-select-ai-insights](./apps/oracle-select-ai-insights/)** - Natural language queries for industry-specific domain data using Oracle Select AI
+- **[planeLLM](./apps/planeLLM/)** - Generate bite-sized educational podcasts on any topic using OCI GenAI service
+- **[rag_in_a_box](./apps/rag_in_a_box/)** - Containerized RAG system with Oracle Database 23ai and local LLMs deployable via Podman
+
+### Workshops Directory (`workshops/`)
+
+- **[ai-meetings](./workshops/ai-meetings/)** - Build web applications using Visual Builder Cloud Service with AI-powered meeting transcription, summarization, and sentiment analysis
+- **[data-in-ai-revolution](./workshops/data-in-ai-revolution/)** - Educational workshop on data types, structures, and processing techniques in AI and machine learning
+- **[mask_detection_labeling](./workshops/mask_detection_labeling/)** - Step-by-step guide for creating and labeling a computer vision model to detect mask-wearing states using RoboFlow
+- **[mask_detection_training](./workshops/mask_detection_training/)** - Training and improving YOLO-based object detection models for mask detection on Oracle Cloud Infrastructure
+- **[neural_networks_hero](./workshops/neural_networks_hero/)** - Comprehensive workshop on neural network implementations, training, and inference for computer vision tasks
+
+### Notebooks Directory (`notebooks/`)
+
+- Currently empty - Reserved for notebook-driven explorations and tutorials
 
 ## 🚀 Getting Started
 
