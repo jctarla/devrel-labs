@@ -790,7 +790,35 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
 
 def create_interface():
     """Create Gradio interface"""
-    with gr.Blocks(title="Agentic RAG System", theme=gr.themes.Soft()) as interface:
+    # Workaround for Gradio schema parsing bug with additionalProperties
+    # This error occurs when Gradio tries to generate API info from function signatures
+    # We'll patch the get_api_info method to handle the TypeError gracefully
+    original_blocks_init = gr.Blocks.__init__
+    
+    def patched_blocks_init(self, *args, **kwargs):
+        original_blocks_init(self, *args, **kwargs)
+        original_get_api_info = self.get_api_info
+        
+        def safe_get_api_info():
+            try:
+                return original_get_api_info()
+            except TypeError as e:
+                if "argument of type 'bool' is not iterable" in str(e) or "additionalProperties" in str(e):
+                    # Return empty API info to avoid crashing
+                    return {}
+                raise
+            except Exception as e:
+                # Log other errors but don't crash
+                print(f"Warning: Error generating API info: {str(e)}")
+                return {}
+        
+        self.get_api_info = safe_get_api_info
+    
+    # Temporarily patch Blocks class
+    gr.Blocks.__init__ = patched_blocks_init
+    
+    try:
+        with gr.Blocks(title="Agentic RAG System", theme=gr.themes.Soft()) as interface:
         gr.Markdown("""
         # 🤖 Agentic RAG System
         
@@ -1347,8 +1375,11 @@ def create_interface():
         - OpenAI model requires API key in `.env` file
         - A2A testing requires the A2A server to be running separately
         """)
-    
-    return interface
+        
+        return interface
+    finally:
+        # Restore original Blocks.__init__
+        gr.Blocks.__init__ = original_blocks_init
 
 def main():
     # Check configuration
