@@ -819,53 +819,53 @@ def create_interface():
     
     try:
         with gr.Blocks(title="Agentic RAG System", theme=gr.themes.Soft()) as interface:
-        gr.Markdown("""
-        # 🤖 Agentic RAG System
-        
-        Upload PDFs, process web content, repositories, and chat with your documents using local or OpenAI models.
-        
-        > **Note on Performance**: When using the Local (Mistral) model, initial loading can take 1-5 minutes, and each query may take 30-60 seconds to process depending on your hardware. OpenAI queries are typically much faster.
-        """)
-        
-        # Show Oracle DB status
-        if ORACLE_DB_AVAILABLE and hasattr(vector_store, 'connection'):
             gr.Markdown("""
-            <div style="padding: 10px; background-color: #d4edda; color: #155724; border-radius: 5px; margin-bottom: 15px;">
-            ✅ <strong>Oracle AI Database 26ai</strong> is active and being used for vector storage.
-            </div>
+            # 🤖 Agentic RAG System
+            
+            Upload PDFs, process web content, repositories, and chat with your documents using local or OpenAI models.
+            
+            > **Note on Performance**: When using the Local (Mistral) model, initial loading can take 1-5 minutes, and each query may take 30-60 seconds to process depending on your hardware. OpenAI queries are typically much faster.
             """)
-        else:
-            gr.Markdown("""
-            <div style="padding: 10px; background-color: #f8d7da; color: #721c24; border-radius: 5px; margin-bottom: 15px;">
-            ⚠️ <strong>ChromaDB</strong> is being used for vector storage. Oracle AI Database 26ai is not available.
-            </div>
-            """)
-        
-        # Create model choices list for reuse
-        model_choices = []
-        # Only Ollama models (no more local Mistral deployments)
-        model_choices.extend([
-            "qwq",
-            "gemma3",
-            "llama3.3",
-            "phi4",
-            "mistral",
-            "llava",
-            "phi3",
-            "deepseek-r1"
-        ])
-        if openai_key:
-            model_choices.append("openai")
-        
-        # Set default model to qwq
-        default_model = "qwq"
-        
-        # Model Management Tab (First Tab)
-        with gr.Tab("Model Management"):
-            gr.Markdown("""
-            ## Model Selection
-            Choose your preferred model for the conversation.
-            """)
+            
+            # Show Oracle DB status
+            if ORACLE_DB_AVAILABLE and hasattr(vector_store, 'connection'):
+                gr.Markdown("""
+                <div style="padding: 10px; background-color: #d4edda; color: #155724; border-radius: 5px; margin-bottom: 15px;">
+                ✅ <strong>Oracle AI Database 26ai</strong> is active and being used for vector storage.
+                </div>
+                """)
+            else:
+                gr.Markdown("""
+                <div style="padding: 10px; background-color: #f8d7da; color: #721c24; border-radius: 5px; margin-bottom: 15px;">
+                ⚠️ <strong>ChromaDB</strong> is being used for vector storage. Oracle AI Database 26ai is not available.
+                </div>
+                """)
+            
+            # Create model choices list for reuse
+            model_choices = []
+            # Only Ollama models (no more local Mistral deployments)
+            model_choices.extend([
+                "qwq",
+                "gemma3",
+                "llama3.3",
+                "phi4",
+                "mistral",
+                "llava",
+                "phi3",
+                "deepseek-r1"
+            ])
+            if openai_key:
+                model_choices.append("openai")
+            
+            # Set default model to qwq
+            default_model = "qwq"
+            
+            # Model Management Tab (First Tab)
+            with gr.Tab("Model Management"):
+                gr.Markdown("""
+                ## Model Selection
+                Choose your preferred model for the conversation.
+                """)
             
             with gr.Row():
                 with gr.Column():
@@ -899,95 +899,95 @@ def create_interface():
             
             Note: All models are available through Ollama. Make sure Ollama is running on your system.
             """)
-        
-        # Document Processing Tab
-        with gr.Tab("Document Processing"):
-            with gr.Row():
-                with gr.Column():
-                    pdf_file = gr.File(label="Upload PDF")
-                    pdf_button = gr.Button("Process PDF")
-                    pdf_output = gr.Textbox(label="PDF Processing Output")
-                    
-                with gr.Column():
-                    url_input = gr.Textbox(label="Enter URL")
-                    url_button = gr.Button("Process URL")
-                    url_output = gr.Textbox(label="URL Processing Output")
-                    
-                with gr.Column():
-                    repo_input = gr.Textbox(label="Enter Repository Path or URL")
-                    repo_button = gr.Button("Process Repository")
-                    repo_output = gr.Textbox(label="Repository Processing Output")
-        
-        # Define collection choices once to ensure consistency
-        collection_choices = [
+            
+            # Document Processing Tab
+            with gr.Tab("Document Processing"):
+                with gr.Row():
+                    with gr.Column():
+                        pdf_file = gr.File(label="Upload PDF")
+                        pdf_button = gr.Button("Process PDF")
+                        pdf_output = gr.Textbox(label="PDF Processing Output")
+                        
+                    with gr.Column():
+                        url_input = gr.Textbox(label="Enter URL")
+                        url_button = gr.Button("Process URL")
+                        url_output = gr.Textbox(label="URL Processing Output")
+                        
+                    with gr.Column():
+                        repo_input = gr.Textbox(label="Enter Repository Path or URL")
+                        repo_button = gr.Button("Process Repository")
+                        repo_output = gr.Textbox(label="Repository Processing Output")
+            
+            # Define collection choices once to ensure consistency
+            collection_choices = [
             "PDF Collection",
             "Repository Collection", 
             "Web Knowledge Base",
             "General Knowledge"
-        ]
-        
-        with gr.Tab("Standard Chat Interface"):
-            with gr.Row():
-                with gr.Column(scale=1):
-                    standard_agent_dropdown = gr.Dropdown(
-                        choices=model_choices,
-                        value=default_model if default_model in model_choices else model_choices[0] if model_choices else None,
-                        label="Select Agent"
-                    )
-                with gr.Column(scale=1):
-                    standard_collection_dropdown = gr.Dropdown(
-                        choices=collection_choices,
-                        value=collection_choices[0],
-                        label="Select Knowledge Base",
-                        info="Choose which knowledge base to use for answering questions"
-                    )
-            gr.Markdown("""
-            > **Collection Selection**: 
-            > - This interface ALWAYS uses the selected collection without performing query analysis.
-            > - "PDF Collection": Will ALWAYS search the PDF documents regardless of query type.
-            > - "Repository Collection": Will ALWAYS search the repository code regardless of query type.
-            > - "Web Knowledge Base": Will ALWAYS search web content regardless of query type.
-            > - "General Knowledge": Will ALWAYS use the model's built-in knowledge without searching collections.
-            """)
-            standard_chatbot = gr.Chatbot(height=400)
-            with gr.Row():
-                standard_msg = gr.Textbox(label="Your Message", scale=9)
-                standard_send = gr.Button("Send", scale=1)
-            standard_clear = gr.Button("Clear Chat")
+            ]
+            
+            with gr.Tab("Standard Chat Interface"):
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        standard_agent_dropdown = gr.Dropdown(
+                            choices=model_choices,
+                            value=default_model if default_model in model_choices else model_choices[0] if model_choices else None,
+                            label="Select Agent"
+                        )
+                    with gr.Column(scale=1):
+                        standard_collection_dropdown = gr.Dropdown(
+                            choices=collection_choices,
+                            value=collection_choices[0],
+                            label="Select Knowledge Base",
+                            info="Choose which knowledge base to use for answering questions"
+                        )
+                gr.Markdown("""
+                > **Collection Selection**: 
+                > - This interface ALWAYS uses the selected collection without performing query analysis.
+                > - "PDF Collection": Will ALWAYS search the PDF documents regardless of query type.
+                > - "Repository Collection": Will ALWAYS search the repository code regardless of query type.
+                > - "Web Knowledge Base": Will ALWAYS search web content regardless of query type.
+                > - "General Knowledge": Will ALWAYS use the model's built-in knowledge without searching collections.
+                """)
+                standard_chatbot = gr.Chatbot(height=400)
+                with gr.Row():
+                    standard_msg = gr.Textbox(label="Your Message", scale=9)
+                    standard_send = gr.Button("Send", scale=1)
+                standard_clear = gr.Button("Clear Chat")
 
-        with gr.Tab("Chain of Thought Chat Interface"):
-            with gr.Row():
-                with gr.Column(scale=1):
-                    cot_agent_dropdown = gr.Dropdown(
-                        choices=model_choices,
-                        value=default_model if default_model in model_choices else model_choices[0] if model_choices else None,
-                        label="Select Agent"
-                    )
-                with gr.Column(scale=1):
-                    cot_collection_dropdown = gr.Dropdown(
-                        choices=collection_choices,
-                        value=collection_choices[0],
-                        label="Select Knowledge Base",
-                        info="Choose which knowledge base to use for answering questions"
-                    )
-            gr.Markdown("""
-            > **Collection Selection**: 
-            > - When a specific collection is selected, the system will ALWAYS use that collection without analysis:
-            >   - "PDF Collection": Will ALWAYS search the PDF documents.
-            >   - "Repository Collection": Will ALWAYS search the repository code.
-            >   - "Web Knowledge Base": Will ALWAYS search web content.
-            >   - "General Knowledge": Will ALWAYS use the model's built-in knowledge.
-            > - This interface shows step-by-step reasoning and may perform query analysis when needed.
-            """)
-            cot_chatbot = gr.Chatbot(height=400)
-            with gr.Row():
-                cot_msg = gr.Textbox(label="Your Message", scale=9)
-                cot_send = gr.Button("Send", scale=1)
-            cot_clear = gr.Button("Clear Chat")
-        
-        # A2A Chat Interface Tab
-        with gr.Tab("A2A Chat Interface"):
-            gr.Markdown("""
+            with gr.Tab("Chain of Thought Chat Interface"):
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        cot_agent_dropdown = gr.Dropdown(
+                            choices=model_choices,
+                            value=default_model if default_model in model_choices else model_choices[0] if model_choices else None,
+                            label="Select Agent"
+                        )
+                    with gr.Column(scale=1):
+                        cot_collection_dropdown = gr.Dropdown(
+                            choices=collection_choices,
+                            value=collection_choices[0],
+                            label="Select Knowledge Base",
+                            info="Choose which knowledge base to use for answering questions"
+                        )
+                gr.Markdown("""
+                > **Collection Selection**: 
+                > - When a specific collection is selected, the system will ALWAYS use that collection without analysis:
+                >   - "PDF Collection": Will ALWAYS search the PDF documents.
+                >   - "Repository Collection": Will ALWAYS search the repository code.
+                >   - "Web Knowledge Base": Will ALWAYS search web content.
+                >   - "General Knowledge": Will ALWAYS use the model's built-in knowledge.
+                > - This interface shows step-by-step reasoning and may perform query analysis when needed.
+                """)
+                cot_chatbot = gr.Chatbot(height=400)
+                with gr.Row():
+                    cot_msg = gr.Textbox(label="Your Message", scale=9)
+                    cot_send = gr.Button("Send", scale=1)
+                cot_clear = gr.Button("Clear Chat")
+            
+            # A2A Chat Interface Tab
+            with gr.Tab("A2A Chat Interface"):
+                gr.Markdown("""
             # 🤖 A2A Chat Interface
             
             Chat with your documents using the A2A (Agent2Agent) protocol. This interface provides the same 
@@ -1043,10 +1043,10 @@ def create_interface():
             with gr.Row():
                 a2a_status_button = gr.Button("🔍 Check A2A Status", variant="secondary", size="sm")
                 a2a_status_output = gr.Textbox(label="A2A Status", lines=2, interactive=False, visible=False)
-        
-        # A2A Testing Tab
-        with gr.Tab("A2A Protocol Testing"):
-            gr.Markdown("""
+            
+            # A2A Testing Tab
+            with gr.Tab("A2A Protocol Testing"):
+                gr.Markdown("""
             # 🤖 A2A Protocol Testing Interface
             
             Test the Agent2Agent (A2A) protocol functionality. Make sure the A2A server is running on `localhost:8000`.
@@ -1154,169 +1154,169 @@ def create_interface():
                     run_all_tests_button = gr.Button("🧪 Run All A2A Tests", variant="primary", size="lg")
                 
                 all_tests_output = gr.Textbox(label="Test Results", lines=15, interactive=False)
-        
-        # Event handlers
-        pdf_button.click(process_pdf, inputs=[pdf_file], outputs=[pdf_output])
-        url_button.click(process_url, inputs=[url_input], outputs=[url_output])
-        repo_button.click(process_repo, inputs=[repo_input], outputs=[repo_output])
-        
-        # Model download event handler
-        download_button.click(download_model, inputs=[model_dropdown], outputs=[model_status])
-        
-        # Standard chat handlers
-        standard_msg.submit(
-            chat,
-            inputs=[
-                standard_msg,
-                standard_chatbot,
-                standard_agent_dropdown,
-                gr.State(False),  # use_cot=False
-                standard_collection_dropdown
-            ],
-            outputs=[standard_chatbot]
-        )
-        standard_send.click(
-            chat,
-            inputs=[
-                standard_msg,
-                standard_chatbot,
-                standard_agent_dropdown,
-                gr.State(False),  # use_cot=False
-                standard_collection_dropdown
-            ],
-            outputs=[standard_chatbot]
-        )
-        standard_clear.click(lambda: None, None, standard_chatbot, queue=False)
-        
-        # CoT chat handlers
-        cot_msg.submit(
-            chat,
-            inputs=[
-                cot_msg,
-                cot_chatbot,
-                cot_agent_dropdown,
-                gr.State(True),  # use_cot=True
-                cot_collection_dropdown
-            ],
-            outputs=[cot_chatbot]
-        )
-        cot_send.click(
-            chat,
-            inputs=[
-                cot_msg,
-                cot_chatbot,
-                cot_agent_dropdown,
-                gr.State(True),  # use_cot=True
-                cot_collection_dropdown
-            ],
-            outputs=[cot_chatbot]
-        )
-        cot_clear.click(lambda: None, None, cot_chatbot, queue=False)
-        
-        # A2A Testing Event Handlers
-        health_button.click(test_a2a_health, outputs=[health_output])
-        agent_card_button.click(test_a2a_agent_card, outputs=[agent_card_output])
-        discover_button.click(test_a2a_agent_discover, inputs=[discover_capability], outputs=[discover_output])
-        a2a_query_button.click(test_a2a_document_query, inputs=[a2a_query, a2a_collection, a2a_use_cot], outputs=[a2a_query_output])
-        task_create_button.click(test_a2a_task_create, inputs=[task_type, task_params], outputs=[task_create_output])
-        task_status_button.click(test_a2a_task_status, inputs=[task_id_input], outputs=[task_status_output])
-        task_list_button.click(get_a2a_task_list, outputs=[task_dashboard_output])
-        task_refresh_button.click(refresh_a2a_tasks, outputs=[task_dashboard_output])
-        
-        # Run all tests function
-        def run_all_a2a_tests():
-            """Run all A2A tests in sequence"""
-            results = []
-            results.append("🧪 Running Complete A2A Test Suite")
-            results.append("=" * 60)
             
-            # Test 1: Health Check
-            results.append("\n1. 🏥 Health Check")
-            results.append("-" * 30)
-            health_result = test_a2a_health()
-            results.append(health_result)
+            # Event handlers
+            pdf_button.click(process_pdf, inputs=[pdf_file], outputs=[pdf_output])
+            url_button.click(process_url, inputs=[url_input], outputs=[url_output])
+            repo_button.click(process_repo, inputs=[repo_input], outputs=[repo_output])
             
-            # Test 2: Agent Card
-            results.append("\n2. 🃏 Agent Card")
-            results.append("-" * 30)
-            card_result = test_a2a_agent_card()
-            results.append(card_result)
+            # Model download event handler
+            download_button.click(download_model, inputs=[model_dropdown], outputs=[model_status])
             
-            # Test 3: Agent Discovery
-            results.append("\n3. 🔍 Agent Discovery")
-            results.append("-" * 30)
-            discover_result = test_a2a_agent_discover("document.query")
-            results.append(discover_result)
+            # Standard chat handlers
+            standard_msg.submit(
+                chat,
+                inputs=[
+                    standard_msg,
+                    standard_chatbot,
+                    standard_agent_dropdown,
+                    gr.State(False),  # use_cot=False
+                    standard_collection_dropdown
+                ],
+                outputs=[standard_chatbot]
+            )
+            standard_send.click(
+                chat,
+                inputs=[
+                    standard_msg,
+                    standard_chatbot,
+                    standard_agent_dropdown,
+                    gr.State(False),  # use_cot=False
+                    standard_collection_dropdown
+                ],
+                outputs=[standard_chatbot]
+            )
+            standard_clear.click(lambda: None, None, standard_chatbot, queue=False)
             
-            # Test 4: Document Query
-            results.append("\n4. 📄 Document Query")
-            results.append("-" * 30)
-            query_result = test_a2a_document_query("What is machine learning?", "General Knowledge", False)
-            results.append(query_result)
+            # CoT chat handlers
+            cot_msg.submit(
+                chat,
+                inputs=[
+                    cot_msg,
+                    cot_chatbot,
+                    cot_agent_dropdown,
+                    gr.State(True),  # use_cot=True
+                    cot_collection_dropdown
+                ],
+                outputs=[cot_chatbot]
+            )
+            cot_send.click(
+                chat,
+                inputs=[
+                    cot_msg,
+                    cot_chatbot,
+                    cot_agent_dropdown,
+                    gr.State(True),  # use_cot=True
+                    cot_collection_dropdown
+                ],
+                outputs=[cot_chatbot]
+            )
+            cot_clear.click(lambda: None, None, cot_chatbot, queue=False)
             
-            # Test 5: Task Creation
-            results.append("\n5. 📋 Task Creation")
-            results.append("-" * 30)
-            task_result = test_a2a_task_create("test_task", '{"description": "A2A test task", "priority": "high"}')
-            results.append(task_result)
+            # A2A Testing Event Handlers
+            health_button.click(test_a2a_health, outputs=[health_output])
+            agent_card_button.click(test_a2a_agent_card, outputs=[agent_card_output])
+            discover_button.click(test_a2a_agent_discover, inputs=[discover_capability], outputs=[discover_output])
+            a2a_query_button.click(test_a2a_document_query, inputs=[a2a_query, a2a_collection, a2a_use_cot], outputs=[a2a_query_output])
+            task_create_button.click(test_a2a_task_create, inputs=[task_type, task_params], outputs=[task_create_output])
+            task_status_button.click(test_a2a_task_status, inputs=[task_id_input], outputs=[task_status_output])
+            task_list_button.click(get_a2a_task_list, outputs=[task_dashboard_output])
+            task_refresh_button.click(refresh_a2a_tasks, outputs=[task_dashboard_output])
             
-            # Test 6: Task Status (if task was created)
-            if "Task ID:" in task_result and "gradio-task-" in task_result:
-                # Extract task ID from result
-                task_id = None
-                for line in task_result.split('\n'):
-                    if "Task ID:" in line:
-                        task_id = line.split("Task ID:")[1].strip()
-                        break
+            # Run all tests function
+            def run_all_a2a_tests():
+                """Run all A2A tests in sequence"""
+                results = []
+                results.append("🧪 Running Complete A2A Test Suite")
+                results.append("=" * 60)
                 
-                if task_id:
-                    results.append("\n6. 📊 Task Status Check")
-                    results.append("-" * 30)
-                    status_result = test_a2a_task_status(task_id)
-                    results.append(status_result)
+                # Test 1: Health Check
+                results.append("\n1. 🏥 Health Check")
+                results.append("-" * 30)
+                health_result = test_a2a_health()
+                results.append(health_result)
+                
+                # Test 2: Agent Card
+                results.append("\n2. 🃏 Agent Card")
+                results.append("-" * 30)
+                card_result = test_a2a_agent_card()
+                results.append(card_result)
+                
+                # Test 3: Agent Discovery
+                results.append("\n3. 🔍 Agent Discovery")
+                results.append("-" * 30)
+                discover_result = test_a2a_agent_discover("document.query")
+                results.append(discover_result)
+                
+                # Test 4: Document Query
+                results.append("\n4. 📄 Document Query")
+                results.append("-" * 30)
+                query_result = test_a2a_document_query("What is machine learning?", "General Knowledge", False)
+                results.append(query_result)
+                
+                # Test 5: Task Creation
+                results.append("\n5. 📋 Task Creation")
+                results.append("-" * 30)
+                task_result = test_a2a_task_create("test_task", '{"description": "A2A test task", "priority": "high"}')
+                results.append(task_result)
+                
+                # Test 6: Task Status (if task was created)
+                if "Task ID:" in task_result and "gradio-task-" in task_result:
+                    # Extract task ID from result
+                    task_id = None
+                    for line in task_result.split('\n'):
+                        if "Task ID:" in line:
+                            task_id = line.split("Task ID:")[1].strip()
+                            break
+                    
+                    if task_id:
+                        results.append("\n6. 📊 Task Status Check")
+                        results.append("-" * 30)
+                        status_result = test_a2a_task_status(task_id)
+                        results.append(status_result)
+                
+                results.append("\n" + "=" * 60)
+                results.append("🎉 A2A Test Suite Complete!")
+                
+                return "\n".join(results)
             
-            results.append("\n" + "=" * 60)
-            results.append("🎉 A2A Test Suite Complete!")
+            run_all_tests_button.click(run_all_a2a_tests, outputs=[all_tests_output])
             
-            return "\n".join(results)
-        
-        run_all_tests_button.click(run_all_a2a_tests, outputs=[all_tests_output])
-        
-        # Individual test event handlers
-        individual_health_button.click(test_individual_health, outputs=[all_tests_output])
-        individual_card_button.click(test_individual_card, outputs=[all_tests_output])
-        individual_discover_button.click(test_individual_discover, outputs=[all_tests_output])
-        individual_query_button.click(test_individual_query, outputs=[all_tests_output])
-        individual_task_button.click(test_individual_task, outputs=[all_tests_output])
-        
-        # A2A Chat Interface Event Handlers
-        a2a_msg.submit(
-            a2a_chat,
-            inputs=[
-                a2a_msg,
-                a2a_chatbot,
-                a2a_agent_dropdown,
-                a2a_use_cot_checkbox,
-                a2a_collection_dropdown
-            ],
-            outputs=[a2a_chatbot]
-        )
-        a2a_send.click(
-            a2a_chat,
-            inputs=[
-                a2a_msg,
-                a2a_chatbot,
-                a2a_agent_dropdown,
-                a2a_use_cot_checkbox,
-                a2a_collection_dropdown
-            ],
-            outputs=[a2a_chatbot]
-        )
-        a2a_clear_button.click(lambda: None, None, a2a_chatbot, queue=False)
-        a2a_status_button.click(test_a2a_health, outputs=[a2a_status_output])
-        
-        # Instructions
-        gr.Markdown("""
+            # Individual test event handlers
+            individual_health_button.click(test_individual_health, outputs=[all_tests_output])
+            individual_card_button.click(test_individual_card, outputs=[all_tests_output])
+            individual_discover_button.click(test_individual_discover, outputs=[all_tests_output])
+            individual_query_button.click(test_individual_query, outputs=[all_tests_output])
+            individual_task_button.click(test_individual_task, outputs=[all_tests_output])
+            
+            # A2A Chat Interface Event Handlers
+            a2a_msg.submit(
+                a2a_chat,
+                inputs=[
+                    a2a_msg,
+                    a2a_chatbot,
+                    a2a_agent_dropdown,
+                    a2a_use_cot_checkbox,
+                    a2a_collection_dropdown
+                ],
+                outputs=[a2a_chatbot]
+            )
+            a2a_send.click(
+                a2a_chat,
+                inputs=[
+                    a2a_msg,
+                    a2a_chatbot,
+                    a2a_agent_dropdown,
+                    a2a_use_cot_checkbox,
+                    a2a_collection_dropdown
+                ],
+                outputs=[a2a_chatbot]
+            )
+            a2a_clear_button.click(lambda: None, None, a2a_chatbot, queue=False)
+            a2a_status_button.click(test_a2a_health, outputs=[a2a_status_output])
+            
+            # Instructions
+            gr.Markdown("""
         ## Instructions
         
         1. **Document Processing**:
@@ -1375,8 +1375,8 @@ def create_interface():
         - OpenAI model requires API key in `.env` file
         - A2A testing requires the A2A server to be running separately
         """)
-        
-        return interface
+            
+            return interface
     finally:
         # Restore original Blocks.__init__
         gr.Blocks.__init__ = original_blocks_init
