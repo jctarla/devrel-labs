@@ -807,6 +807,14 @@ def create_interface():
                     # Return empty API info to avoid crashing
                     return {}
                 raise
+            except ValueError as e:
+                # Handle value errors during API generation
+                print(f"Warning: ValueError generating API info: {str(e)}")
+                return {}
+            except AttributeError as e:
+                # Handle attribute errors during API generation
+                print(f"Warning: AttributeError generating API info: {str(e)}")
+                return {}
             except Exception as e:
                 # Log other errors but don't crash
                 print(f"Warning: Error generating API info: {str(e)}")
@@ -1031,6 +1039,8 @@ def create_interface():
                         value=False,
                         info="Enable step-by-step reasoning through A2A"
                     )
+                    # State component to sync with checkbox for API generation
+                    a2a_use_cot_state = gr.State(value=False)
                 with gr.Column(scale=1):
                     a2a_clear_button = gr.Button("Clear Chat", variant="secondary")
             
@@ -1296,7 +1306,7 @@ def create_interface():
                     a2a_msg,
                     a2a_chatbot,
                     a2a_agent_dropdown,
-                    a2a_use_cot_checkbox,
+                    a2a_use_cot_state,  # Use state instead of checkbox for API generation consistency
                     a2a_collection_dropdown
                 ],
                 outputs=[a2a_chatbot]
@@ -1307,13 +1317,23 @@ def create_interface():
                     a2a_msg,
                     a2a_chatbot,
                     a2a_agent_dropdown,
-                    a2a_use_cot_checkbox,
+                    a2a_use_cot_state,  # Use state instead of checkbox for API generation consistency
                     a2a_collection_dropdown
                 ],
                 outputs=[a2a_chatbot]
             )
             a2a_clear_button.click(lambda: None, None, a2a_chatbot, queue=False)
             a2a_status_button.click(test_a2a_health, outputs=[a2a_status_output])
+            
+            # Sync checkbox with state component for API generation consistency
+            def sync_cot_state(checkbox_value):
+                return checkbox_value
+            
+            a2a_use_cot_checkbox.change(
+                sync_cot_state,
+                inputs=[a2a_use_cot_checkbox],
+                outputs=[a2a_use_cot_state]
+            )
             
             # Instructions
             gr.Markdown("""
