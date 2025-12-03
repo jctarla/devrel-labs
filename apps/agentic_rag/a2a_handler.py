@@ -308,9 +308,9 @@ class A2AHandler:
     def _call_ollama_api(self, model: str, prompt: str, system_prompt: str = None) -> str:
         """Call Ollama API directly for inference"""
         import requests
-        
+
         url = "http://127.0.0.1:11434/api/generate"
-        
+
         payload = {
             "model": model,
             "prompt": prompt,
@@ -320,15 +320,28 @@ class A2AHandler:
                 "num_predict": 512
             }
         }
-        
+
         if system_prompt:
             payload["system"] = system_prompt
-        
+
         try:
             response = requests.post(url, json=payload, timeout=120)
             response.raise_for_status()
             result = response.json()
             return result.get("response", "")
+        except requests.exceptions.ConnectionError:
+            logger.error("Ollama API connection failed - Ollama may not be running")
+            raise Exception("Ollama is not running. Please start Ollama with 'ollama serve'")
+        except requests.exceptions.Timeout:
+            logger.error("Ollama API request timed out")
+            raise Exception("Ollama request timed out. The model may be too large or Ollama is overloaded.")
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 404:
+                logger.error(f"Model {model} not found in Ollama")
+                raise Exception(f"Model {model} not found. Please pull it with 'ollama pull {model}'")
+            else:
+                logger.error(f"Ollama API HTTP error: {str(e)}")
+                raise
         except Exception as e:
             logger.error(f"Error calling Ollama API: {str(e)}")
             raise
@@ -652,11 +665,70 @@ Final Answer:"""
                     "error": f"Unknown agent ID: {agent_id}",
                     "message": "Agent not found or not supported"
                 }
-                
+
         except Exception as e:
-            logger.error(f"Error in agent query: {str(e)}")
+            logger.error(f"Error in agent query for {agent_id}: {str(e)}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
+
+            # Fallback: Try using the main RAG agent for CoT if Ollama failed
+            if agent_id in ["planner_agent_v1", "researcher_agent_v1", "reasoner_agent_v1", "synthesizer_agent_v1"]:
+                logger.info(f"🔄 Falling back to main RAG agent for {agent_id}")
+                try:
+                    # Use the main RAG agent with CoT enabled
+                    self.rag_agent.use_cot = True
+
+                    if agent_id == "planner_agent_v1":
+                        # For planner, create a planning-focused query
+                        fallback_query = f"Break down this query into 3-4 clear steps: {query}"
+                        response = self.rag_agent.process_query(fallback_query)
+                        plan = response.get("answer", "Unable to generate plan")
+                        # Extract steps from response
+                        lines = plan.split('\n')
+                        steps = [line.strip() for line in lines if line.strip() and len(line.strip()) > 10][:4]
+                        return {
+                            "plan": plan,
+                            "steps": steps,
+                            "agent_id": agent_id,
+                            "fallback_used": True
+                        }
+                    elif agent_id == "researcher_agent_v1":
+                        # For researcher, do knowledge search
+                        fallback_query = f"Research information about: {step or query}"
+                        response = self.rag_agent.process_query(fallback_query)
+                        summary = response.get("answer", "No research findings available")
+                        return {
+                            "findings": [{"content": summary, "metadata": {"source": "Fallback Research"}}],
+                            "summary": summary,
+                            "agent_id": agent_id,
+                            "fallback_used": True
+                        }
+                    elif agent_id == "reasoner_agent_v1":
+                        # For reasoner, provide analytical reasoning
+                        fallback_query = f"Analyze and reason about: {step or query}"
+                        response = self.rag_agent.process_query(fallback_query)
+                        conclusion = response.get("answer", "Unable to reason about this step")
+                        return {
+                            "conclusion": conclusion,
+                            "reasoning": conclusion,
+                            "agent_id": agent_id,
+                            "fallback_used": True
+                        }
+                    elif agent_id == "synthesizer_agent_v1":
+                        # For synthesizer, combine the reasoning steps
+                        steps_text = "\n".join(reasoning_steps) if reasoning_steps else "No reasoning steps provided"
+                        fallback_query = f"Synthesize a final answer from these reasoning steps:\n{steps_text}\n\nOriginal query: {query}"
+                        response = self.rag_agent.process_query(fallback_query)
+                        answer = response.get("answer", "Unable to synthesize answer")
+                        return {
+                            "answer": answer,
+                            "summary": answer,
+                            "agent_id": agent_id,
+                            "fallback_used": True
+                        }
+                except Exception as fallback_e:
+                    logger.error(f"Fallback also failed: {str(fallback_e)}")
+
             return {
                 "error": str(e),
                 "message": "Failed to process agent query"

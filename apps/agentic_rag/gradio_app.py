@@ -565,6 +565,7 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
         print("\n" + "="*50)
         print(f"A2A Chat - New message: {message}")
         print(f"Agent: {agent_type}, CoT: {use_cot}, Collection: {collection}")
+        print("A2A Client base URL:", a2a_client.base_url)
         print("="*50 + "\n")
         
         # Map collection names to A2A collection format
@@ -1610,4 +1611,4 @@ def download_model(model_type: str) -> str:
         return f"❌ Error: {str(e)}"
 
 if __name__ == "__main__":
-    main() 
+    main()
