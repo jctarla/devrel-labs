@@ -96,19 +96,48 @@ class A2AClient:
         }
         
         try:
+            url = f"{self.base_url}/a2a"
             response = self.session.post(
-                f"{self.base_url}/a2a",
+                url,
                 json=payload,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
+                timeout=30
             )
             response.raise_for_status()
             return response.json()
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"Cannot connect to API at {self.base_url}. Is the server running?"
+            print(f"❌ Connection Error: {error_msg}")
             return {
                 "jsonrpc": "2.0",
                 "error": {
                     "code": -32603,
-                    "message": f"Request failed: {str(e)}"
+                    "message": error_msg,
+                    "details": str(e)
+                },
+                "id": request_id
+            }
+        except requests.exceptions.Timeout as e:
+            error_msg = f"Request to {self.base_url} timed out after 30 seconds"
+            print(f"❌ Timeout Error: {error_msg}")
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": error_msg,
+                    "details": str(e)
+                },
+                "id": request_id
+            }
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Request failed: {str(e)}"
+            print(f"❌ Request Error: {error_msg}")
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": error_msg,
+                    "details": f"URL: {self.base_url}/a2a"
                 },
                 "id": request_id
             }
@@ -131,8 +160,25 @@ class A2AClient:
         except requests.exceptions.RequestException as e:
             return {"error": f"Health check failed: {str(e)}"}
 
-# Initialize A2A client
-a2a_client = A2AClient()
+# Initialize A2A client with configurable base URL
+def get_a2a_base_url():
+    """Get A2A base URL from config or environment"""
+    # Try to get from config.yaml first
+    config = load_config()
+    agent_endpoints = config.get('AGENT_ENDPOINTS', {})
+    # Use planner_url as the base URL (all agents are on same server in local setup)
+    base_url = agent_endpoints.get('planner_url', 'http://localhost:8000')
+    
+    # Allow override via environment variable
+    import os
+    base_url = os.getenv('A2A_BASE_URL', base_url)
+    
+    return base_url
+
+a2a_base_url = get_a2a_base_url()
+a2a_client = A2AClient(base_url=a2a_base_url)
+print(f"✅ A2A Client initialized with base URL: {a2a_base_url}")
+print(f"   Make sure the API server is running on {a2a_base_url}")
 
 # Global task tracking for A2A testing
 a2a_tasks = {}
@@ -1479,7 +1525,8 @@ def main():
         server_name="0.0.0.0",
         server_port=7860,
         share=True,
-        inbrowser=True
+        inbrowser=True,
+        api_name=False  # Disable Gradio's API generation to prevent "No API found" errors
     )
 
 def download_model(model_type: str) -> str:
