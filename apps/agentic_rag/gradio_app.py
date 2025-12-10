@@ -1525,8 +1525,7 @@ def main():
         server_name="0.0.0.0",
         server_port=7860,
         share=True,
-        inbrowser=True,
-        api_name=False  # Disable Gradio's API generation to prevent "No API found" errors
+        inbrowser=True
     )
 
 def download_model(model_type: str) -> str:
