@@ -1043,7 +1043,7 @@ def create_interface():
                 > - "Web Knowledge Base": Will ALWAYS search web content regardless of query type.
                 > - "General Knowledge": Will ALWAYS use the model's built-in knowledge without searching collections.
                 """)
-                standard_chatbot = gr.Chatbot(height=400)
+                standard_chatbot = gr.Chatbot(height=400, type="tuples")
                 with gr.Row():
                     standard_msg = gr.Textbox(label="Your Message", scale=9)
                     standard_send = gr.Button("Send", scale=1)
@@ -1073,7 +1073,7 @@ def create_interface():
                 >   - "General Knowledge": Will ALWAYS use the model's built-in knowledge.
                 > - This interface shows step-by-step reasoning and may perform query analysis when needed.
                 """)
-                cot_chatbot = gr.Chatbot(height=400)
+                cot_chatbot = gr.Chatbot(height=400, type="tuples")
                 with gr.Row():
                     cot_msg = gr.Textbox(label="Your Message", scale=9)
                     cot_send = gr.Button("Send", scale=1)
@@ -1130,7 +1130,7 @@ def create_interface():
                 with gr.Column(scale=1):
                     a2a_clear_button = gr.Button("Clear Chat", variant="secondary")
             
-            a2a_chatbot = gr.Chatbot(height=400, label="A2A Chat")
+            a2a_chatbot = gr.Chatbot(height=400, label="A2A Chat", type="tuples")
             with gr.Row():
                 a2a_msg = gr.Textbox(label="Your Message", scale=9, placeholder="Ask a question...")
                 a2a_send = gr.Button("Send", scale=1, variant="primary")
