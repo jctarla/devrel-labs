@@ -223,7 +223,30 @@ def process_repo(repo_path: str) -> str:
     except Exception as e:
         return f"✗ Error processing repository: {str(e)}"
 
-def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool, collection: str) -> List[List[str]]:
+def convert_to_messages_format(history):
+    """Convert history from tuple format to messages format for Gradio compatibility"""
+    messages = []
+    for item in history:
+        if isinstance(item, dict) and "role" in item and "content" in item:
+            # Already in messages format
+            messages.append(item)
+        elif isinstance(item, (list, tuple)) and len(item) == 2:
+            # Tuple format: [user_msg, assistant_msg]
+            user_msg, assistant_msg = item
+            if user_msg:  # Only add if user message exists
+                messages.append({"role": "user", "content": str(user_msg) if user_msg is not None else ""})
+            if assistant_msg:  # Only add if assistant message exists
+                messages.append({"role": "assistant", "content": str(assistant_msg) if assistant_msg is not None else ""})
+        elif isinstance(item, (list, tuple)) and len(item) == 1:
+            # Single message (assistant-only)
+            messages.append({"role": "assistant", "content": str(item[0]) if item[0] is not None else ""})
+    return messages
+
+def sanitize_history(history):
+    """Sanitize and convert history to messages format for Gradio compatibility"""
+    return convert_to_messages_format(history)
+
+def chat(message: str, history, agent_type: str, use_cot: bool, collection: str):
     """Process chat message using selected agent and collection"""
     try:
         print("\n" + "="*50)
@@ -263,12 +286,17 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
             model_type = "Ollama"
             model_name = agent_type
         
+        # Convert input history to messages format for processing
+        history = convert_to_messages_format(history) if history else []
+        
         # Select appropriate agent and reinitialize with correct settings
         if model_type == "OpenAI":
             if not openai_key:
                 response_text = "OpenAI key not found. Please check your config."
                 print(f"Error: {response_text}")
-                return history + [[message, response_text]]
+                history.append({"role": "user", "content": message})
+                history.append({"role": "assistant", "content": response_text})
+                return sanitize_history(history)
             agent = RAGAgent(vector_store, openai_api_key=openai_key, use_cot=use_cot, 
                             collection=collection, skip_analysis=skip_analysis, max_response_length=max_response_length)
         elif model_type == "Local (Mistral)":
@@ -276,7 +304,9 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
             if not hf_token:
                 response_text = "Local agent not available. Please check your HuggingFace token configuration."
                 print(f"Error: {response_text}")
-                return history + [[message, response_text]]
+                history.append({"role": "user", "content": message})
+                history.append({"role": "assistant", "content": response_text})
+                return sanitize_history(history)
             agent = LocalRAGAgent(vector_store, use_cot=use_cot, collection=collection, 
                                  skip_analysis=skip_analysis, quantization=quantization, max_response_length=max_response_length)
         else:  # Ollama models
@@ -286,7 +316,9 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
             except Exception as e:
                 response_text = f"Error initializing Ollama model: {str(e)}"
                 print(f"Error: {response_text}")
-                return history + [[message, response_text]]
+                history.append({"role": "user", "content": message})
+                history.append({"role": "assistant", "content": response_text})
+                return sanitize_history(history)
         
         # Process query and get response
         print("Processing query...")
@@ -314,7 +346,7 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
                 print(step_text)
                 
                 # Add intermediate response to chat history to show progress
-                history.append([None, f"🔄 Step {i} Conclusion:\n{step}"])
+                history.append({"role": "assistant", "content": f"🔄 Step {i} Conclusion:\n{step}"})
             
             # Add final answer
             print("\nFinal Answer:")
@@ -344,7 +376,8 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
                         print(source_line)
             
             # Add final formatted response to history
-            history.append([message, formatted_response])
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": formatted_response})
         else:
             # For standard response (no CoT)
             formatted_response = response.get("answer", "No answer provided") if isinstance(response, dict) else str(response)
@@ -372,21 +405,23 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
                         formatted_response += source_line
                         print(source_line)
             
-            history.append([message, formatted_response])
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": formatted_response})
         
         print("\n" + "="*50)
         print("Response complete")
         print("="*50 + "\n")
         
-        return history
+        return sanitize_history(history)
     except Exception as e:
         error_msg = f"Error processing query: {str(e)}"
         print(f"\nError occurred:")
         print("-" * 50)
         print(error_msg)
         print("="*50 + "\n")
-        history.append([message, error_msg])
-        return history
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": error_msg})
+        return sanitize_history(history)
 
 # A2A Testing Functions
 def test_a2a_health() -> str:
@@ -605,7 +640,7 @@ def test_individual_task() -> str:
     return test_a2a_task_create("individual_test", '{"description": "Individual test task", "test_type": "quick"}')
 
 # A2A Chat Interface Functions
-def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool, collection: str) -> List[List[str]]:
+def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: str):
     """Process chat message using A2A protocol with distributed specialized agents for CoT"""
     try:
         print("\n" + "="*50)
@@ -613,6 +648,9 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
         print(f"Agent: {agent_type}, CoT: {use_cot}, Collection: {collection}")
         print("A2A Client base URL:", a2a_client.base_url)
         print("="*50 + "\n")
+        
+        # Convert input history to messages format for processing
+        history = convert_to_messages_format(history) if history else []
         
         # Map collection names to A2A collection format
         collection_mapping = {
@@ -652,8 +690,9 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
                     if attempt == max_retries:
                         # Final attempt failed, return error
                         print(f"❌ Planner failed after {max_retries} attempts")
-                        history.append([message, f"Planner Error: Failed to generate steps after {max_retries} attempts. {error_msg}"])
-                        return history
+                        history.append({"role": "user", "content": message})
+                        history.append({"role": "assistant", "content": f"Planner Error: Failed to generate steps after {max_retries} attempts. {error_msg}"})
+                        return sanitize_history(history)
                     continue  # Try again
                 
                 planner_result = planner_response.get("result", {})
@@ -674,11 +713,12 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
                         # All retries exhausted
                         error_msg = f"Planner failed to generate steps after {max_retries} attempts. The planner returned a plan but no extractable steps were found."
                         print(f"❌ {error_msg}")
-                        history.append([message, f"Planner Error: {error_msg}\n\nPlan received:\n{plan}"])
-                        return history
+                        history.append({"role": "user", "content": message})
+                        history.append({"role": "assistant", "content": f"Planner Error: {error_msg}\n\nPlan received:\n{plan}"})
+                        return sanitize_history(history)
             
             # Log the successful planning
-            history.append([None, f"🎯 Planning:\n{plan}"])
+            history.append({"role": "assistant", "content": f"🎯 Planning:\n{plan}"})
             
             # Collect reasoning steps
             reasoning_steps = []
@@ -736,7 +776,7 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
                     print(f"   ✅ Conclusion reached")
                 
                 reasoning_steps.append(conclusion)
-                history.append([None, f"🔄 Step {i} - {step[:50]}...\n{conclusion}"])
+                history.append({"role": "assistant", "content": f"🔄 Step {i} - {step[:50]}...\n{conclusion}"})
             
             # Step 4: Call Synthesizer Agent via A2A
             print(f"\n5️⃣ Synthesizing final answer...")
@@ -754,8 +794,9 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
             if synthesizer_response.get("error"):
                 error_msg = f"Synthesizer Error: {json.dumps(synthesizer_response['error'], indent=2)}"
                 print(f"❌ {error_msg}")
-                history.append([message, error_msg])
-                return history
+                history.append({"role": "user", "content": message})
+                history.append({"role": "assistant", "content": error_msg})
+                return sanitize_history(history)
             
             synthesizer_result = synthesizer_response.get("result", {})
             final_answer = synthesizer_result.get("answer", "No answer provided")
@@ -776,7 +817,8 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
                             seen_sources.add(source)
                 formatted_response += sources_text
             
-            history.append([message, formatted_response])
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": formatted_response})
             
             print("\n" + "="*50)
             print("✅ A2A CoT Response complete")
@@ -799,8 +841,9 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
             if response.get("error"):
                 error_msg = f"A2A Error: {json.dumps(response['error'], indent=2)}"
                 print(f"❌ A2A Error detected: {error_msg}")
-                history.append([message, error_msg])
-                return history
+                history.append({"role": "user", "content": message})
+                history.append({"role": "assistant", "content": error_msg})
+                return sanitize_history(history)
             
             result = response.get("result", {})
             answer = result.get("answer", "No answer provided")
@@ -818,13 +861,14 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
                         sources_text += f"- {source}\n"
                 formatted_response += sources_text
             
-            history.append([message, formatted_response])
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": formatted_response})
             
             print("\n" + "="*50)
             print("✅ A2A Standard Response complete")
             print("="*50 + "\n")
         
-        return history
+        return sanitize_history(history)
         
     except Exception as e:
         error_msg = f"A2A Chat Error: {str(e)}"
@@ -834,8 +878,9 @@ def a2a_chat(message: str, history: List[List[str]], agent_type: str, use_cot: b
         import traceback
         print(traceback.format_exc())
         print("="*50 + "\n")
-        history.append([message, error_msg])
-        return history
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": error_msg})
+        return sanitize_history(history)
 
 def create_interface():
     """Create Gradio interface"""
