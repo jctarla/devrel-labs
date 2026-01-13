@@ -1,5 +1,6 @@
 docling
 langchain-openai
+langchain-oracledb
 chromadb
 python-dotenv
 openai
@@ -7,16 +8,13 @@ pydantic
 fastapi
 uvicorn
 python-multipart
-transformers
 torch
-accelerate
 pyyaml
 trafilatura
 gradio
 lxml_html_clean
 langchain
 gitingest
-bitsandbytes
 ollama
 oracledb
 sentence-transformers

@@ -1,6 +1,9 @@
 import argparse
 import json
-from OraDBVectorStore import OraDBVectorStore
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.OraDBVectorStore import OraDBVectorStore
 import time
 import sys
 import yaml

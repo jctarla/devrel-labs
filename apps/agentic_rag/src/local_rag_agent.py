@@ -1,8 +1,8 @@
 from typing import List, Dict, Any, Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
-from store import VectorStore
-from agents.agent_factory import create_agents
+from .store import VectorStore
+from .agents.agent_factory import create_agents
 import argparse
 import yaml
 import os
@@ -11,7 +11,7 @@ import time
 import json
 from pathlib import Path
 try:
-    from OraDBVectorStore import OraDBVectorStore
+    from .OraDBVectorStore import OraDBVectorStore
     ORACLE_DB_AVAILABLE = True
 except ImportError:
     ORACLE_DB_AVAILABLE = False
@@ -146,7 +146,7 @@ class LocalRAGAgent:
         
         # Set default model if none provided
         if model_name is None:
-            model_name = "qwen2"
+            model_name = "gemma3:270m"
             print(f"Using default model: {model_name}")
         
         # Initialize vector store if not provided
@@ -195,8 +195,8 @@ class LocalRAGAgent:
             if model_name and model_name.startswith("ollama:"):
                 model_name = model_name.replace("ollama:", "")
             
-            # Always append :latest to Ollama model names
-            if not model_name.endswith(":latest"):
+            # Always append :latest to Ollama model names if no tag is provided
+            if ":" not in model_name:
                 model_name = f"{model_name}:latest"
             
             # Load Ollama model
@@ -211,44 +211,19 @@ class LocalRAGAgent:
             self.pipeline = self.ollama_handler
             print(f"Using Ollama model: {model_name}")
         else:
-            # Only initialize Mistral if no model is specified
-            if not model_name:
-                print("\nLoading default model and tokenizer...")
-                print("Model: mistralai/Mistral-7B-Instruct-v0.2")
-                self.model_name = "mistralai/Mistral-7B-Instruct-v0.2"
-                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    device_map="auto",
-                    torch_dtype=torch.float16,
-                    load_in_8bit=quantization == "8bit",
-                    load_in_4bit=quantization == "4bit"
-                )
-                self.pipeline = pipeline(
-                    "text-generation",
-                    model=self.model,
-                    tokenizer=self.tokenizer,
-                    device_map="auto"
-                )
-                print(f"Using default model: {self.model_name}")
-            else:
-                print(f"\nUsing specified model: {model_name}")
-                self.model_name = model_name
-                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    device_map="auto",
-                    torch_dtype=torch.float16,
-                    load_in_8bit=quantization == "8bit",
-                    load_in_4bit=quantization == "4bit"
-                )
-                self.pipeline = pipeline(
-                    "text-generation",
-                    model=self.model,
-                    tokenizer=self.tokenizer,
-                    device_map="auto"
-                )
-                print(f"Using specified model: {self.model_name}")
+            # Fallback for unexpected non-Ollama models (though we aim to only use Ollama now)
+             if not model_name:
+                print("\nNo model specified. Defaulting to Ollama model.")
+                model_name = "gemma3:270m"
+                self.ollama_handler = OllamaModelHandler(model_name, max_response_length=self.max_response_length)
+                self.pipeline = self.ollama_handler
+                print(f"Using default Ollama model: {model_name}")
+             else:
+                # If a specific local model path is provided (not recommended per new directive, but keeping safe fallback stub)
+                print(f"\nWarning: Non-Ollama model requested: {model_name}. Attempting to use as Ollama model name.")
+                self.ollama_handler = OllamaModelHandler(model_name, max_response_length=self.max_response_length)
+                self.pipeline = self.ollama_handler
+                print(f"Using specified model as Ollama model: {model_name}")
         
         # Create LLM wrapper with max_response_length
         self.llm = LocalLLM(self.pipeline, max_response_length=self.max_response_length)
@@ -515,7 +490,7 @@ def main():
     parser = argparse.ArgumentParser(description="Query documents using local LLM")
     parser.add_argument("--query", required=True, help="Query to search for")
     parser.add_argument("--embeddings", default="oracle", choices=["oracle", "chromadb"], help="Embeddings backend to use")
-    parser.add_argument("--model", default="qwen2", help="Model to use (default: qwen2)")
+    parser.add_argument("--model", default="gemma3:270m", help="Model to use (default: gemma3:270m)")
     parser.add_argument("--collection", help="Collection to search (PDF, Repository, General Knowledge)")
     parser.add_argument("--use-cot", action="store_true", help="Use Chain of Thought reasoning")
     parser.add_argument("--store-path", default="embeddings", help="Path to ChromaDB store")

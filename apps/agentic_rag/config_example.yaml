@@ -20,7 +20,7 @@ AGENT_ENDPOINTS:
   synthesizer_url: http://localhost:8000
 
 # Model configuration for specialized agents (via Ollama API) (only necessary if not using the GUI)
-SPECIALIZED_AGENT_MODEL: deepseek-r1  # Options: qwq, deepseek-r1, llama3.3, phi4, gemma3, etc.
+SPECIALIZED_AGENT_MODEL: gemma3:270m  # Options: qwq, deepseek-r1, llama3.3, phi4, gemma3, etc.
 
 # Response generation configuration
 MAX_RESPONSE_LENGTH: 2048  # Maximum number of tokens to generate in responses (default: 2048, can be increased for longer responses like 4096, 8192)

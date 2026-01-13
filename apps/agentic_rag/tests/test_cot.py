@@ -2,9 +2,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from local_rag_agent import LocalRAGAgent
-from rag_agent import RAGAgent
-from store import VectorStore
+from src.local_rag_agent import LocalRAGAgent
+# from rag_agent import RAGAgent  # Removed as we are standardizing on LocalRAGAgent
+from src.store import VectorStore
 from dotenv import load_dotenv
 import yaml
 import argparse
@@ -53,26 +53,23 @@ def compare_responses(agent, query: str, description: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Compare standard vs Chain of Thought prompting")
-    parser.add_argument("--model", choices=['local', 'openai'], default='local',
-                       help="Choose between local Mistral model or OpenAI")
+    parser.add_argument("--model", default='local', help="Model to use (default: gemma3:270m)")
     args = parser.parse_args()
     
     config = load_config()
-    store = VectorStore(persist_directory="chroma_db")
     
-    # Initialize appropriate agent
-    if args.model == 'local':
-        if not config['hf_token']:
-            console.print("[red]Error: HuggingFace token not found in config.yaml")
-            sys.exit(1)
-        agent = LocalRAGAgent(store)
-        model_name = "Mistral-7B"
-    else:
-        if not config['openai_key']:
-            console.print("[red]Error: OpenAI API key not found in .env")
-            sys.exit(1)
-        agent = RAGAgent(store, openai_api_key=config['openai_key'])
-        model_name = "GPT-4"
+    # Try Oracle first, then Chroma
+    try:
+        from OraDBVectorStore import OraDBVectorStore
+        store = OraDBVectorStore()
+        console.print("[green]Using Oracle DB Vector Store[/green]")
+    except ImportError:
+        store = VectorStore(persist_directory="embeddings")
+        console.print("[yellow]Using ChromaDB Vector Store[/yellow]")
+    
+    # Initialize agent
+    agent = LocalRAGAgent(store, model_name="gemma3:270m")
+    model_name = "gemma3:270m"
     
     console.print(f"\n[bold]Testing {model_name} Responses[/bold]")
     console.print("=" * 80)

@@ -13,20 +13,25 @@ import asyncio
 import threading
 from datetime import datetime
 
-from pdf_processor import PDFProcessor
-from web_processor import WebProcessor
-from repo_processor import RepoProcessor
-from store import VectorStore
+from src.pdf_processor import PDFProcessor
+from src.web_processor import WebProcessor
+from src.repo_processor import RepoProcessor
+from src.store import VectorStore
+from src.specialized_agent_cards import (
+    get_planner_agent_card, 
+    get_researcher_agent_card, 
+    get_reasoner_agent_card, 
+    get_synthesizer_agent_card
+)
 
 # Try to import OraDBVectorStore
 try:
-    from OraDBVectorStore import OraDBVectorStore
+    from src.OraDBVectorStore import OraDBVectorStore
     ORACLE_DB_AVAILABLE = True
 except ImportError:
     ORACLE_DB_AVAILABLE = False
 
-from local_rag_agent import LocalRAGAgent
-from rag_agent import RAGAgent
+from src.local_rag_agent import LocalRAGAgent
 
 # Load environment variables and config
 load_dotenv()
@@ -66,16 +71,16 @@ max_response_length = config.get('MAX_RESPONSE_LENGTH', 2048)  # Default to 2048
 openai_key = os.getenv("OPENAI_API_KEY")
 
 # Initialize agents with use_cot=True to ensure CoT is available
-# Default to Ollama qwen2, fall back to Mistral if available
+# Default to Ollama gemma3:270m
 try:
-    local_agent = LocalRAGAgent(vector_store, model_name="ollama:qwen2", use_cot=True, max_response_length=max_response_length)
-    print("Using Ollama qwen2 as default model")
+    local_agent = LocalRAGAgent(vector_store, model_name="ollama:gemma3:270m", use_cot=True, max_response_length=max_response_length)
+    print("Using Ollama gemma3:270m as default model")
 except Exception as e:
-    print(f"Could not initialize Ollama qwen2: {str(e)}")
-    local_agent = LocalRAGAgent(vector_store, use_cot=True, max_response_length=max_response_length) if hf_token else None
-    print("Falling back to Local Mistral model" if hf_token else "No local model available")
+    print(f"Could not initialize Ollama gemma3:270m: {str(e)}")
+    local_agent = None
+    print("No local model available")
     
-openai_agent = RAGAgent(vector_store, openai_api_key=openai_key, use_cot=True, max_response_length=max_response_length) if openai_key else None
+openai_agent = None
 
 # A2A Client for testing
 class A2AClient:
@@ -291,14 +296,11 @@ def chat(message: str, history, agent_type: str, use_cot: bool, collection: str)
         
         # Select appropriate agent and reinitialize with correct settings
         if model_type == "OpenAI":
-            if not openai_key:
-                response_text = "OpenAI key not found. Please check your config."
-                print(f"Error: {response_text}")
-                history.append({"role": "user", "content": message})
-                history.append({"role": "assistant", "content": response_text})
-                return sanitize_history(history)
-            agent = RAGAgent(vector_store, openai_api_key=openai_key, use_cot=use_cot, 
-                            collection=collection, skip_analysis=skip_analysis, max_response_length=max_response_length)
+            response_text = "OpenAI support has been removed in favor of local Ollama models."
+            print(f"Error: {response_text}")
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": response_text})
+            return sanitize_history(history)
         elif model_type == "Local (Mistral)":
             # For HF models, we need the token
             if not hf_token:
@@ -1291,6 +1293,196 @@ def create_interface():
                     run_all_tests_button = gr.Button("🧪 Run All A2A Tests", variant="primary", size="lg")
                 
                 all_tests_output = gr.Textbox(label="Test Results", lines=15, interactive=False)
+
+            # A2A Demo Tab
+            with gr.Tab("A2A Demo"):
+                gr.Markdown("## A2A Agent Swapping Demo")
+                gr.Markdown("This demo showcases the Agent-to-Agent (A2A) Protocol's ability to dynamically swap agents based on availability. Toggle agent availability and run tasks to see the orchestrator automatically select the best available agent.")
+                
+                # State for agent availability
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.Markdown("### 1. Agent Availability")
+                        gr.Markdown("Toggle which agents are available to accept tasks.")
+                        
+                        # Planner
+                        gr.Markdown("#### Planner Agents")
+                        planner_a_status = gr.Checkbox(label="Planner Agent A (v1.0)", value=True)
+                        planner_b_status = gr.Checkbox(label="Planner Agent B (v1.1 - Fast)", value=True)
+                        
+                        # Researcher
+                        gr.Markdown("#### Researcher Agents")
+                        researcher_a_status = gr.Checkbox(label="Researcher Agent A (Web)", value=True)
+                        researcher_b_status = gr.Checkbox(label="Researcher Agent B (PDF/Vector)", value=True)
+                        
+                        # Reasoner
+                        gr.Markdown("#### Reasoner Agents")
+                        reasoner_a_status = gr.Checkbox(label="Reasoner Agent A (DeepThink)", value=True)
+                        reasoner_b_status = gr.Checkbox(label="Reasoner Agent B (QuickLogic)", value=True)
+                        
+                        # Synthesizer
+                        gr.Markdown("#### Synthesizer Agents")
+                        synthesizer_a_status = gr.Checkbox(label="Synthesizer Agent A (Creative)", value=True)
+                        synthesizer_b_status = gr.Checkbox(label="Synthesizer Agent B (Concise)", value=True)
+
+                    with gr.Column(scale=2):
+                        gr.Markdown("### 2. Task Simulation")
+                        
+                        with gr.Row():
+                            demo_task_btn = gr.Button("🚀 Start Multi-Agent Task", variant="primary")
+                            swap_scenario_btn = gr.Button("🔄 Simulate Researcher Swap")
+                        
+                        gr.Markdown("### 3. Execution Trace")
+                        demo_log_output = gr.HTML(label="Task Trace", value="<div style='padding:10px; border:1px solid #ddd; border-radius:5px; height:400px; overflow-y:auto; font-family:monospace;'>Running log will appear here...</div>")
+                        
+                        # Hidden state to store current log
+                        demo_log_state = gr.State(value=[])
+                        
+                # Agent Card Display Area
+                with gr.Row():
+                    with gr.Accordion("View Agent Cards", open=False):
+                        gr.Markdown("### Registered Agent Cards")
+                        
+                        # Create tabs for each agent type card
+                        with gr.Tabs():
+                            with gr.Tab("Planner"):
+                                gr.JSON(value=get_planner_agent_card())
+                            with gr.Tab("Researcher"):
+                                gr.JSON(value=get_researcher_agent_card())
+                            with gr.Tab("Reasoner"):
+                                gr.JSON(value=get_reasoner_agent_card())
+                            with gr.Tab("Synthesizer"):
+                                gr.JSON(value=get_synthesizer_agent_card())
+
+                # Simulation Logic
+                def run_demo_simulation(p_a, p_b, res_a, res_b, rea_a, rea_b, syn_a, syn_b, current_logs):
+                    import time
+                    import random
+
+                    
+                    # Helper to generate log entry
+                    def log(msg, type="info"):
+                        timestamp = time.strftime("%H:%M:%S")
+                        color = "#333"
+                        if type == "success": color = "green"
+                        elif type == "error": color = "red" 
+                        elif type == "warning": color = "orange"
+                        elif type == "swapping": color = "blue"
+                        
+                        entry = f"<div style='margin-bottom:5px;'><span style='color:#888'>[{timestamp}]</span> <span style='color:{color}'>{msg}</span></div>"
+                        return entry
+
+                    new_logs = []
+                    if not current_logs:
+                        new_logs.append(log("🏁 Starting new A2A demo simulation tasks...", "info"))
+                    else:
+                        new_logs = list(current_logs)
+                        new_logs.append(log("-" * 40))
+                        new_logs.append(log("🏁 Starting new task cycle...", "info"))
+
+                    # 1. Discovery & Planning
+                    new_logs.append(log("🔍 Orchestrator: Discovering Planner Agents...", "info"))
+                    selected_planner = None
+                    if p_a:
+                        selected_planner = "Planner A (v1.0)"
+                    elif p_b:
+                        selected_planner = "Planner B (v1.1)"
+                    
+                    if not selected_planner:
+                        new_logs.append(log("❌ No Planner Agents available! Task failed.", "error"))
+                        return "".join(new_logs), new_logs
+                    
+                    if not p_a and p_b:
+                        new_logs.append(log(f"⚠️ Planner A is BUSY. Swapping to available agent...", "swapping"))
+                    
+                    new_logs.append(log(f"✅ Selected: <b>{selected_planner}</b>", "success"))
+                    new_logs.append(log(f"📋 {selected_planner}: Decomposing task into sub-steps...", "info"))
+                    
+                    # 2. Research
+                    new_logs.append(log("🔍 Orchestrator: Discovering Researcher Agents...", "info"))
+                    selected_researcher = None
+                    if res_a:
+                        selected_researcher =   "Researcher A (Web)"
+                    elif res_b:
+                        selected_researcher = "Researcher B (PDF/Vector)"
+                    
+                    if not selected_researcher:
+                        new_logs.append(log("❌ No Researcher Agents available! Task failed.", "error"))
+                        return "".join(new_logs), new_logs
+                        
+                    if not res_a and res_b:
+                        new_logs.append(log(f"⚠️ Researcher A is BUSY. Swapping to available agent...", "swapping"))
+
+                    new_logs.append(log(f"✅ Selected: <b>{selected_researcher}</b>", "success"))
+                    new_logs.append(log(f"🔬 {selected_researcher}: Gathering information...", "info"))
+                    
+                    # 3. Reasoning
+                    new_logs.append(log("🔍 Orchestrator: Discovering Reasoner Agents...", "info"))
+                    selected_reasoner = None
+                    if rea_a:
+                        selected_reasoner = "Reasoner A (DeepThink)"
+                    elif rea_b:
+                        selected_reasoner = "Reasoner B (QuickLogic)"
+                    
+                    if not selected_reasoner:
+                        new_logs.append(log("❌ No Reasoner Agents available! Task failed.", "error"))
+                        return "".join(new_logs), new_logs
+                    
+                    if not rea_a and rea_b:
+                        new_logs.append(log(f"⚠️ Reasoner A is BUSY. Swapping to available agent...", "swapping"))
+
+                    new_logs.append(log(f"✅ Selected: <b>{selected_reasoner}</b>", "success"))
+                    new_logs.append(log(f"🧠 {selected_reasoner}: Analyzing findings...", "info"))
+                    
+                    # 4. Synthesis
+                    new_logs.append(log("🔍 Orchestrator: Discovering Synthesizer Agents...", "info"))
+                    selected_synthesizer = None
+                    if syn_a:
+                        selected_synthesizer = "Synthesizer A (Creative)"
+                    elif syn_b:
+                        selected_synthesizer = "Synthesizer B (Concise)"
+                    
+                    if not selected_synthesizer:
+                        new_logs.append(log("❌ No Synthesizer Agents available! Task failed.", "error"))
+                        return "".join(new_logs), new_logs
+
+                    if not syn_a and syn_b:
+                        new_logs.append(log(f"⚠️ Synthesizer A is BUSY. Swapping to available agent...", "swapping"))
+
+                    new_logs.append(log(f"✅ Selected: <b>{selected_synthesizer}</b>", "success"))
+                    new_logs.append(log(f"✍️ {selected_synthesizer}: Compiling final response...", "info"))
+                    
+                    new_logs.append(log("🎉 Task Completed Successfully!", "success"))
+                    
+                    return "".join(new_logs), new_logs
+
+                # Event Listeners
+                demo_task_btn.click(
+                    run_demo_simulation,
+                    inputs=[
+                        planner_a_status, planner_b_status,
+                        researcher_a_status, researcher_b_status,
+                        reasoner_a_status, reasoner_b_status,
+                        synthesizer_a_status, synthesizer_b_status,
+                        demo_log_state
+                    ],
+                    outputs=[demo_log_output, demo_log_state]
+                )
+                
+                swap_scenario_btn.click(
+                    lambda: (False, True), # Make Res A Busy, Res B Available
+                    outputs=[researcher_a_status, researcher_b_status]
+                ).then(
+                    run_demo_simulation,
+                    inputs=[
+                        planner_a_status, planner_b_status,
+                        researcher_a_status, researcher_b_status,
+                        reasoner_a_status, reasoner_b_status,
+                        synthesizer_a_status, synthesizer_b_status,
+                        demo_log_state
+                    ],
+                    outputs=[demo_log_output, demo_log_state]
+                )
             
             # Event handlers
             pdf_button.click(process_pdf, inputs=[pdf_file], outputs=[pdf_output], api_name=False)
@@ -1517,17 +1709,13 @@ def create_interface():
            - **Complete Test Suite**: Run all A2A tests in sequence
         
         6. **Performance Expectations**:
-           - **Ollama models**: Typically faster inference, default is qwen2
-           - **Local (Mistral) model**: Initial loading takes 1-5 minutes, each query takes 30-60 seconds
-           - **OpenAI model**: Fast responses, typically a few seconds per query
-           - Chain of Thought reasoning takes longer for all models
+           - **Default Model**: gemma3:270m (Ollama) - Optimized for speed and quality
+           - **Other Ollama models**: Supported if installed via `ollama pull`
            - **A2A requests**: Depends on A2A server performance and network latency
-           - **A2A Chat Interface**: Same performance as A2A server + network overhead
         
         Note: The interface will automatically detect available models based on your configuration:
-        - Ollama models are the default option (requires Ollama to be installed and running)
-        - Local Mistral model requires HuggingFace token in `config.yaml` (fallback option)
-        - OpenAI model requires API key in `.env` file
+        - gemma3:270m is the default option (requires Ollama to be installed and running)
+        - Other Ollama models can be selected if available
         - A2A testing requires the A2A server to be running separately
         """)
             
@@ -1546,17 +1734,13 @@ def main():
             available_models = [model.model for model in models]
             
             # Check if any default models are available
-            if "qwen2" not in available_models and "qwen2:latest" not in available_models and \
-               "llama3" not in available_models and "llama3:latest" not in available_models and \
-               "phi3" not in available_models and "phi3:latest" not in available_models:
-                print("⚠️ Warning: Ollama is running but no default models (qwen2, llama3, phi3) are available.")
-                print("Please download a model through the Model Management tab or run:")
-                print("    ollama pull qwen2")
-                print("    ollama pull llama3")
-                print("    ollama pull phi3")
+            if "gemma3:270m" not in available_models and "gemma3:270m:latest" not in available_models:
+                print("⚠️ Warning: Ollama is running but default model (gemma3:270m) is not available.")
+                print("Please download it through the Model Management tab or run:")
+                print("    ollama pull gemma3:270m")
             else:
                 available_default_models = []
-                for model in ["qwen2", "llama3", "phi3"]:
+                for model in ["gemma3:270m"]:
                     if model in available_models or f"{model}:latest" in available_models:
                         available_default_models.append(model)
                 
@@ -1709,4 +1893,32 @@ def download_model(model_type: str) -> str:
         return f"❌ Error: {str(e)}"
 
 if __name__ == "__main__":
+    # Start A2A API Server if not running
+    import uvicorn
+    import threading
+    import time
+    import requests
+    from src.main import app as fastapi_app
+
+    def run_api_server():
+        """Run the FastAPI server in a separate thread"""
+        print("🚀 Starting A2A API Server...")
+        config = uvicorn.Config(fastapi_app, host="0.0.0.0", port=8000, log_level="error")
+        server = uvicorn.Server(config)
+        server.run()
+
+    def start_api_server_if_needed():
+        """Check if API server is running, if not start it"""
+        try:
+            requests.get("http://localhost:8000/docs", timeout=1)
+            print("✅ A2A API Server is already running")
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            print("⚠️ A2A API Server not running. Starting it automatically...")
+            api_thread = threading.Thread(target=run_api_server, daemon=True)
+            api_thread.start()
+            # Wait a moment for server to start
+            time.sleep(2)
+            print("✅ A2A API Server started in background")
+
+    start_api_server_if_needed()
     main()

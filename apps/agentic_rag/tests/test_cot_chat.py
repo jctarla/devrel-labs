@@ -6,9 +6,9 @@ from pathlib import Path
 # Add parent directory to path to import modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from gradio_app import chat
-from store import VectorStore
-from local_rag_agent import LocalRAGAgent
+from src.gradio_app import chat
+from src.store import VectorStore
+from src.local_rag_agent import LocalRAGAgent
 
 # Configure logging
 logging.basicConfig(
@@ -41,10 +41,16 @@ def test_cot_chat():
     try:
         # Initialize components
         logger.info("Initializing vector store...")
-        vector_store = VectorStore()
+        try:
+            from src.OraDBVectorStore import OraDBVectorStore
+            vector_store = OraDBVectorStore()
+            logger.info("Using Oracle DB Vector Store")
+        except ImportError:
+            vector_store = VectorStore()
+            logger.info("Using ChromaDB Vector Store")
         
         logger.info("Initializing local agent...")
-        agent = LocalRAGAgent(vector_store, model_name="ollama:phi3", use_cot=True)
+        agent = LocalRAGAgent(vector_store, model_name="gemma3:270m", use_cot=True)
         
         # Test message
         test_message = "What is self-instruct in AI?"
@@ -83,7 +89,7 @@ def test_cot_chat():
             result = chat(
                 message=test_message,
                 history=history,
-                agent_type="ollama:phi3",
+                agent_type="gemma3:270m",
                 use_cot=True,
                 collection="PDF Collection"
             )

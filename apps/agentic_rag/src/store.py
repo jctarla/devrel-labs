@@ -203,7 +203,20 @@ def main():
     parser.add_argument("--store-path", default="embeddings", help="Path to vector store")
     
     args = parser.parse_args()
-    store = VectorStore(persist_directory=args.store_path)
+    args = parser.parse_args()
+    
+    # Try using Oracle DB Vector Store first
+    try:
+        from .OraDBVectorStore import OraDBVectorStore
+        store = OraDBVectorStore()
+        print("✓ Using Oracle DB Vector Store")
+    except ImportError:
+        print("⚠ Oracle DB Vector Store not available, using ChromaDB")
+        store = VectorStore(persist_directory=args.store_path)
+    except Exception as e:
+        print(f"⚠ Failed to initialize Oracle DB Vector Store: {e}")
+        print("Using ChromaDB Vector Store")
+        store = VectorStore(persist_directory=args.store_path)
     
     if args.add:
         with open(args.add, 'r', encoding='utf-8') as f:

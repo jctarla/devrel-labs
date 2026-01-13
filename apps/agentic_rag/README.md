@@ -13,8 +13,8 @@ The system has the following features:
 - Persistent vector storage with Oracle AI Database 26ai (PDF and Websites)
 - Smart context retrieval and response generation
 - FastAPI-based REST API for document upload and querying
-- Support for both OpenAI-based agents or local, transformer-based agents (`Mistral-7B` by default)
-- Support for quantized models (4-bit/8-bit) and Ollama models for faster inference
+- Support for local, agentic workflows using `gemma3:270m` via Ollama
+- Optimized for speed with Ollama integration
 - Optional Chain of Thought (CoT) reasoning for more detailed and structured responses
 
 <img src="img/gradio_1.png" alt="Gradio Interface" width="80%">
@@ -31,19 +31,18 @@ Here you can find a result of using Chain of Thought (CoT) reasoning:
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- OpenAI API key (optional, for OpenAI-based agent)
-- HuggingFace token (optional, for local Mistral model)
+1. Install and run **Ollama** (required for local LLM inference):
+   - [Download Ollama](https://ollama.com/download)
+   - Pull the default model:
+     ```bash
+     ollama pull gemma3:270m
+     ```
 
-### Hardware Requirements
-
-- For the OpenAI Agent: Standard CPU machine
-- For the Local Agent: 
-  - Minimum 16GB RAM (recommended >24GBs)
-  - GPU with 8GB VRAM recommended for better performance
-  - Will run on CPU if GPU is not available, but will be significantly slower.
-  - For quantized models (4-bit/8-bit): Reduced VRAM requirements (4-6GB) with minimal performance impact
-  - For Ollama models: Requires Ollama to be installed and running, with significantly reduced memory requirements
+2. (Optional) For specialized agents, you may pull other Ollama models:
+   ```bash
+   ollama pull qwen2.5-coder:7b
+   ollama pull deepseek-r1:1.5b
+   ```
 
 ### Setup
 
@@ -55,51 +54,12 @@ Here you can find a result of using Chain of Thought (CoT) reasoning:
     pip install -r requirements.txt
     ```
 
-2. Authenticate with HuggingFace (for Hugging Face models only):
-   
-   The system uses `Mistral-7B` by default, which requires authentication with HuggingFace:
+2. Start the Ollama service
 
-   a. Create a HuggingFace account [here](https://huggingface.co/join), if you don't have one yet.
-   
-   b. Accept the Mistral-7B model terms & conditions [here](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2)
-   
-   c. Create an access token [here](https://huggingface.co/settings/tokens)
-   
-   d. Create a `config.yaml` file (you can copy from `config_example.yaml`), and add your HuggingFace token:
-   ```yaml
-   HUGGING_FACE_HUB_TOKEN: your_token_here
-   ```
-
-3. (Optional) If you want to use the OpenAI-based agent instead of the default local model, create a `.env` file with your OpenAI API key:
-
-   ```bash
-   OPENAI_API_KEY=your-api-key-here
-   ```
-
-   If no API key is provided, the system will automatically download and use `Mistral-7B-Instruct-v0.2` for text generation when using the local model. No additional configuration is needed.
-   
-4. For quantized models, ensure bitsandbytes is installed:
+3. Pull the models you want to use beforehand:
 
     ```bash
-    pip install bitsandbytes>=0.41.0
-    ```
-
-5. For Ollama models, install Ollama:
-
-    a. Download and install Ollama from [ollama.com/download](https://ollama.com/download) for Windows, or run the following command in Linux:
-
-      ```bash
-      curl -fsSL https://ollama.com/install.sh | sh
-      ```
-    
-    b. Start the Ollama service
-    
-    c. Pull the models you want to use beforehand:
-    
-    ```bash
-    ollama pull llama3
-    ollama pull phi3
-    ollama pull qwen2
+    ollama pull gemma3:270m
     ```
 
 ## 1. Getting Started
@@ -111,7 +71,14 @@ You can launch this solution in three ways:
 Start the API server:
 
 ```bash
-python main.py
+# Option 1: Start the CLI (Command Line Interface)
+python agent_cli.py
+
+# Option 2: Start the GUI (Gradio Interface)
+python gradio_app.py
+
+# Alternative: Start the API server directly
+python -m src.main
 ```
 
 The API will be available at `http://localhost:8000`. You can then use the API endpoints as described in the API Endpoints section below.
@@ -131,7 +98,11 @@ To launch the interface:
 python gradio_app.py
 ```
 
-This will start the Gradio server and automatically open the interface in your default browser at `http://localhost:7860`. The interface has two main tabs:
+This will start the Gradio server and automatically:
+1. Start the A2A API server in the background (required for agent collaboration)
+2. Open the interface in your default browser at `http://localhost:7860`
+
+The interface has two main tabs:
 
 1. **Model Management**:
    - Download models in advance to prepare them for use
@@ -145,20 +116,33 @@ This will start the Gradio server and automatically open the interface in your d
 
 3. **Chat Interface**:
    - Select between different model options:
-     - Local (Mistral) - Default Mistral-7B model (recommended)
-     - Local (Mistral) with 4-bit or 8-bit quantization for faster inference
-     - Ollama models (llama3, phi-3, qwen2) as alternative options
-     - OpenAI (if API key is configured)
+     - **gemma3:270m** - Default local model (recommended)
+     - Other Ollama models (if installed)
    - Toggle Chain of Thought reasoning for more detailed responses
    - Chat with your documents using natural language
    - Clear chat history as needed
 
 Note: The interface will automatically detect available models based on your configuration:
-- Local Mistral model requires HuggingFace token in `config.yaml` (default option)
-- Ollama models require Ollama to be installed and running (alternative options)
-- OpenAI model requires API key in `.env` file
+- Ollama models require Ollama to be installed and running
 
-### 3. Using Individual Python Components via Command Line
+### 3. Usage
+
+The easiest way to use the system is through the interactive CLI:
+
+```bash
+python agent_cli.py
+```
+
+This will launch a menu-driven interface where you can:
+1. **Process PDFs**: Ingest documents from files, directories, or URLs.
+2. **Process Websites**: Crawl and ingest web content.
+3. **Manage Vector Store**: Add processed chunks to the database.
+4. **Test Oracle DB**: Verify connectivity and view table statistics.
+5. **Chat with Agent**: Interactive RAG chat using `gemma3:270m` (Ollama).
+
+### 4. Component-level Usage (Advanced)
+
+If you prefer to run individual components manually:
 
 #### Process PDFs
 
@@ -166,13 +150,13 @@ To process a PDF file and save the chunks to a JSON file, run:
 
 ```bash
 # Process a single PDF
-python pdf_processor.py --input path/to/document.pdf --output chunks.json
+python -m src.pdf_processor --input path/to/document.pdf --output chunks.json
 
 # Process multiple PDFs in a directory
-python pdf_processor.py --input path/to/pdf/directory --output chunks.json
+python -m src.pdf_processor --input path/to/pdf/directory --output chunks.json
 
 # Process a single PDF from a URL 
-python pdf_processor.py --input https://example.com/document.pdf --output chunks.json
+python -m src.pdf_processor --input https://example.com/document.pdf --output chunks.json
 # sample pdf: https://arxiv.org/pdf/2203.06605
 ```
 
@@ -181,13 +165,13 @@ python pdf_processor.py --input https://example.com/document.pdf --output chunks
 Process a single website and save the content to a JSON file:
 
 ```bash
-python web_processor.py --input https://example.com --output docs/web_content.json
+python -m src.web_processor --input https://example.com --output docs/web_content.json
 ```
 
 Or, process multiple URLs from a file and save them into a single JSON file:
 
 ```bash
-python web_processor.py --input urls.txt --output docs/web_content.json
+python -m src.web_processor --input urls.txt --output docs/web_content.json
 ```
 
 #### Manage Vector Store
@@ -196,14 +180,14 @@ To add documents to the vector store and query them, run:
 
 ```bash
 # Add documents from a chunks file, by default to the pdf_collection
-python store.py --add chunks.json
+python -m src.store --add chunks.json
 # for websites, use the --add-web flag
-python store.py --add-web docs/web_content.json
+python -m src.store --add-web docs/web_content.json
 
 # Query the vector store directly, both pdf and web collections
 # llm will make the best decision on which collection to query based upon your input
-python store.py --query "your search query"
-python local_rag_agent.py --query "your search query"
+python -m src.store --query "your search query"
+python -m src.local_rag_agent --query "your search query"
 ```
 
 #### Test Oracle DB Vector Store
@@ -218,13 +202,13 @@ To run the test:
 
 ```bash
 # Basic test - checks connection and runs a test query
-python test_oradb.py
+python tests/test_oradb.py
 
 # Show only collection statistics without inserting test data
-python test_oradb.py --stats-only
+python tests/test_oradb.py --stats-only
 
 # Specify a custom query for testing
-python test_oradb.py --query "artificial intelligence"
+python tests/test_oradb.py --query "artificial intelligence"
 ```
 
 The script will:
@@ -245,14 +229,11 @@ Requirements:
 
 #### Use RAG Agent
 
-To query documents using either OpenAI or a local model, run:
+To query documents using the local Ollama model, run:
 
 ```bash
-# Using OpenAI (requires API key in .env)
-python rag_agent.py --query "Can you explain the DaGAN Approach proposed in the Depth-Aware Generative Adversarial Network for Talking Head Video Generation article?"
-
-# Using local Mistral model
-python local_rag_agent.py --query "Can you explain the DaGAN Approach proposed in the Depth-Aware Generative Adversarial Network for Talking Head Video Generation article?"
+# Using local ollama model (gemma3:270m by default)
+python -m src.local_rag_agent --query "Can you explain the DaGAN Approach proposed in the Depth-Aware Generative Adversarial Network for Talking Head Video Generation article?"
 ```
 
 ### 4. Complete Pipeline Example
@@ -261,18 +242,15 @@ First, we process a document and query it using the local model. Then, we add th
 
 ```bash
 # 1. Process the PDF
-python pdf_processor.py --input example.pdf --output chunks.json
+python -m src.pdf_processor --input example.pdf --output chunks.json
 
-#python pdf_processor.py --input https://arxiv.org/pdf/2203.06605 --output chunks.json
+#python -m src.pdf_processor --input https://arxiv.org/pdf/2203.06605 --output chunks.json
 
 # 2. Add to vector store
-python store.py --add chunks.json
+python -m src.store --add chunks.json
 
 # 3. Query using local model
-python local_rag_agent.py --query "Can you explain the DaGAN Approach proposed in the Depth-Aware Generative Adversarial Network for Talking Head Video Generation article?"
-
-# Or using OpenAI (requires API key):
-python rag_agent.py --query "Can you explain the DaGAN Approach proposed in the Depth-Aware Generative Adversarial Network for Talking Head Video Generation article?"
+python -m src.local_rag_agent --query "Can you explain the DaGAN Approach proposed in the Depth-Aware Generative Adversarial Network for Talking Head Video Generation article?"
 ```
 
 ## 2. Chain of Thought (CoT) Support
@@ -294,20 +272,14 @@ You can activate the multi-agent CoT system in several ways:
 
 1. **Command Line**:
 ```bash
-# Using local Mistral model (default)
+# Using local gemma3:270m model (default)
 python local_rag_agent.py --query "your query" --use-cot
-
-# Using OpenAI model
-python rag_agent.py --query "your query" --use-cot
 ```
 
 2. **Testing the System**:
 ```bash
 # Test with local model (default)
 python tests/test_new_cot.py
-
-# Test with OpenAI model
-python tests/test_new_cot.py --model openai
 ```
 
 3. **API Endpoint**:
@@ -397,8 +369,7 @@ The system consists of several key components:
 3. **GitHub Repository Processor**: we use `gitingest` to extract and chunk text from repositories
 4. **Vector Store**: Manages document embeddings and similarity search using `Oracle AI Database 26ai` (default) or `ChromaDB` (fallback)
 5. **RAG Agent**: Makes intelligent decisions about query routing and response generation
-   - OpenAI Agent: Uses `gpt-4-turbo-preview` for high-quality responses, but requires an OpenAI API key
-   - Local Agent: Uses `Mistral-7B` as an open-source alternative
+   - Uses `gemma3:270m` via Ollama as the default local model
 6. **FastAPI Server**: Provides REST API endpoints for document upload and querying
 7. **Gradio Interface**: Provides a user-friendly web interface for interacting with the RAG system
 
@@ -415,7 +386,7 @@ The RAG Agent flow is the following:
 You can run the system from the command line using:
 
 ```bash
-python local_rag_agent.py --query "Your question here" [options]
+python -m src.local_rag_agent --query "Your question here" [options]
 ```
 
 ### Command Line Arguments
@@ -424,7 +395,7 @@ python local_rag_agent.py --query "Your question here" [options]
 | --- | --- | --- |
 | `--query` | The query to process | *Required* |
 | `--embeddings` | Select embeddings backend (`oracle` or `chromadb`) | `oracle` |
-| `--model` | Model to use for inference | `mistralai/Mistral-7B-Instruct-v0.2` |
+| `--model` | Model to use for inference | `gemma3:270m` |
 | `--collection` | Collection to query (PDF, Repository, Web, General) | Auto-determined |
 | `--use-cot` | Enable Chain of Thought reasoning | `False` |
 | `--store-path` | Path to ChromaDB store (if using ChromaDB) | `embeddings` |
@@ -436,29 +407,29 @@ python local_rag_agent.py --query "Your question here" [options]
 
 Query using Oracle DB (default):
 ```bash
-python local_rag_agent.py --query "How does vector search work?"
+python -m src.local_rag_agent --query "How does vector search work?"
 ```
 
 Force using ChromaDB:
 ```bash
-python local_rag_agent.py --query "How does vector search work?" --embeddings chromadb
+python -m src.local_rag_agent --query "How does vector search work?" --embeddings chromadb
 ```
 
 Query with Chain of Thought reasoning:
 ```bash
-python local_rag_agent.py --query "Explain the difference between RAG and fine-tuning" --use-cot
+python -m src.local_rag_agent --query "Explain the difference between RAG and fine-tuning" --use-cot
 ```
 
 Query a specific collection:
 ```bash
-python local_rag_agent.py --query "How to implement a queue?" --collection "Repository Collection"
+python -m src.local_rag_agent --query "How to implement a queue?" --collection "Repository Collection"
 ```
 
-## 3. Agent2Agent (A2A) Protocol Integration
+## 5. Agent2Agent (A2A) Protocol Integration
 
 The agentic_rag system now includes full support for the Agent2Agent (A2A) protocol, enabling seamless communication and collaboration with other AI agents. This integration transforms the system into an interoperable agent that can participate in multi-agent workflows and ecosystems.
 
-### 3.0 Distributed Chain of Thought Architecture
+### 5.0 Distributed Chain of Thought Architecture
 
 The system implements a **distributed multi-agent Chain of Thought (CoT)** architecture where each specialized agent can run on separate servers and communicate via the A2A protocol. This enables:
 
@@ -766,13 +737,13 @@ The A2A implementation includes comprehensive tests covering all functionality:
 
 ```bash
 # Run all A2A tests
-python run_a2a_tests.py
+python tests/run_a2a_tests.py
 
 # Run specific test categories
-python -m pytest test_a2a.py::TestA2AModels -v
-python -m pytest test_a2a.py::TestA2AHandler -v
-python -m pytest test_a2a.py::TestTaskManager -v
-python -m pytest test_a2a.py::TestAgentRegistry -v
+python -m pytest tests/test_a2a.py::TestA2AModels -v
+python -m pytest tests/test_a2a.py::TestA2AHandler -v
+python -m pytest tests/test_a2a.py::TestTaskManager -v
+python -m pytest tests/test_a2a.py::TestAgentRegistry -v
 ```
 
 #### 3.5.2 Test Coverage

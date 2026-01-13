@@ -532,9 +532,8 @@ if __name__ == "__main__":
         duration_ms=567.8
     )
     
-    # Test model event
     logger.log_model_event(
-        model_name="qwen2",
+        model_name="gemma3:270m",
         model_type="ollama",
         user_prompt="What is AI?",
         response="AI is artificial intelligence...",

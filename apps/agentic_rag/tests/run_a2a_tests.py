@@ -10,6 +10,8 @@ import sys
 import asyncio
 import subprocess
 from pathlib import Path
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 def run_tests():
     """Run A2A protocol tests"""
@@ -50,10 +52,10 @@ def run_quick_test():
     
     try:
         # Import and test basic functionality
-        from a2a_models import A2ARequest, A2AResponse
-        from agent_card import get_agent_card
-        from task_manager import TaskManager
-        from agent_registry import AgentRegistry
+        from src.a2a_models import A2ARequest, A2AResponse
+        from src.agent_card import get_agent_card
+        from src.task_manager import TaskManager
+        from src.agent_registry import AgentRegistry
         
         # Test agent card
         print("Testing agent card...")

@@ -7,26 +7,26 @@ from dotenv import load_dotenv
 import uuid
 import time
 
-from pdf_processor import PDFProcessor
-from store import VectorStore
-from local_rag_agent import LocalRAGAgent
-from rag_agent import RAGAgent
+from .pdf_processor import PDFProcessor
+from .store import VectorStore
+from .local_rag_agent import LocalRAGAgent
+
 
 # Try to import OraDBVectorStore
 try:
-    from OraDBVectorStore import OraDBVectorStore
+    from .OraDBVectorStore import OraDBVectorStore
     ORACLE_DB_AVAILABLE = True
 except ImportError:
     ORACLE_DB_AVAILABLE = False
 
 # A2A Protocol imports
-from a2a_models import A2ARequest, A2AResponse
-from a2a_handler import A2AHandler
-from agent_card import get_agent_card
+from .a2a_models import A2ARequest, A2AResponse
+from .a2a_handler import A2AHandler
+from .agent_card import get_agent_card
 
 # Event Logger import
 try:
-    from OraDBEventLogger import OraDBEventLogger
+    from .OraDBEventLogger import OraDBEventLogger
     event_logger = OraDBEventLogger()
     EVENT_LOGGING_ENABLED = True
     print("✅ Event logging enabled with Oracle DB")
@@ -79,33 +79,16 @@ except ImportError:
     ollama_available = False
     print("\nOllama not installed. You can install it with: pip install ollama")
 
-# Initialize RAG agent - use OpenAI if API key is available, otherwise use local model or Ollama
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if openai_api_key:
-    print("\nUsing OpenAI GPT-4 for RAG...")
-    rag_agent = RAGAgent(vector_store=vector_store, openai_api_key=openai_api_key)
-else:
-    # Try to use local Mistral model first
-    try:
-        print("\nTrying to use local Mistral model...")
-        rag_agent = LocalRAGAgent(vector_store=vector_store)
-        print("Successfully initialized local Mistral model.")
-    except Exception as e:
-        print(f"\nFailed to initialize local Mistral model: {str(e)}")
-        
-        # Fall back to Ollama if Mistral fails and Ollama is available
-        if ollama_available:
-            try:
-                print("\nFalling back to Ollama with llama3 model...")
-                rag_agent = LocalRAGAgent(vector_store=vector_store, model_name="ollama:llama3")
-                print("Successfully initialized Ollama with llama3 model.")
-            except Exception as e:
-                print(f"\nFailed to initialize Ollama: {str(e)}")
-                print("No available models. Please check your configuration.")
-                raise e
-        else:
-            print("\nNo available models. Please check your configuration.")
-            raise e
+# Initialize RAG agent - using Ollama with gemma3:270m (default)
+try:
+    print("\nInitializing Local RAG Agent with gemma3:270m...")
+    rag_agent = LocalRAGAgent(vector_store=vector_store, model_name="gemma3:270m")
+    print("Successfully initialized Local RAG Agent.")
+except Exception as e:
+    print(f"\nFailed to initialize Local RAG Agent: {str(e)}")
+    if not ollama_available:
+        print("Ollama is not installed or running. Please check your configuration.")
+    raise e
 
 # Initialize A2A handler
 print("\nInitializing A2A Protocol handler...")
@@ -204,42 +187,18 @@ async def query(request: QueryRequest):
     try:
         # Determine which model to use
         if request.model:
-            if request.model.startswith("ollama:") and ollama_available:
-                # Use specified Ollama model
-                rag_agent = LocalRAGAgent(vector_store=vector_store, model_name=request.model, use_cot=request.use_cot)
-                model_type = "ollama"
-            elif request.model == "openai" and openai_api_key:
-                # Use OpenAI
-                rag_agent = RAGAgent(vector_store=vector_store, openai_api_key=openai_api_key, use_cot=request.use_cot)
-                model_type = "openai"
-            else:
-                # Use default local model
-                rag_agent = LocalRAGAgent(vector_store=vector_store, use_cot=request.use_cot)
-                model_type = "local"
+            # Check if model name starts with ollama: prefix, if not add it for logging/handling purposes if needed
+            # but LocalRAGAgent handles it.
+            # Just instantiate LocalRAGAgent
+            rag_agent = LocalRAGAgent(vector_store=vector_store, model_name=request.model, use_cot=request.use_cot)
+            model_type = "ollama"
         else:
-            # Reinitialize agent with CoT setting using default model
-            if openai_api_key:
-                rag_agent = RAGAgent(vector_store=vector_store, openai_api_key=openai_api_key, use_cot=request.use_cot)
-                model_type = "openai"
-                model_name = "openai-gpt4"
-            else:
-                # Try local Mistral first
-                try:
-                    rag_agent = LocalRAGAgent(vector_store=vector_store, use_cot=request.use_cot)
-                    model_type = "local"
-                    model_name = "mistral-7b"
-                except Exception as e:
-                    print(f"Failed to initialize local Mistral model: {str(e)}")
-                    # Fall back to Ollama if available
-                    if ollama_available:
-                        try:
-                            rag_agent = LocalRAGAgent(vector_store=vector_store, model_name="ollama:llama3", use_cot=request.use_cot)
-                            model_type = "ollama"
-                            model_name = "llama3"
-                        except Exception as e2:
-                            raise Exception(f"Failed to initialize any model: {str(e2)}")
-                    else:
-                        raise e
+            # Use default local model initialized globally
+            # But we need to handle use_cot per request, so re-init might be needed or update prop
+            # LocalRAGAgent is stateful regarding use_cot? Yes in _process_query logic.
+            # But here we are re-instantiating.
+            rag_agent = LocalRAGAgent(vector_store=vector_store, model_name="gemma3:270m", use_cot=request.use_cot)
+            model_type = "ollama"
             
         response = rag_agent.process_query(request.query)
         

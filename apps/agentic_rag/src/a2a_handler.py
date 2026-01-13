@@ -10,14 +10,14 @@ import logging
 import re
 import yaml
 from typing import Dict, Any, Optional
-from a2a_models import (
+from .a2a_models import (
     A2ARequest, A2AResponse, A2AError, TaskInfo, TaskStatus,
     DocumentQueryParams, DocumentUploadParams, TaskCreateParams,
     TaskStatusParams, AgentDiscoverParams, AgentCard, AgentCapability, AgentEndpoint
 )
-from task_manager import TaskManager
-from agent_registry import AgentRegistry
-from specialized_agent_cards import get_all_specialized_agent_cards, get_agent_card_by_id
+from .task_manager import TaskManager
+from .agent_registry import AgentRegistry
+from .specialized_agent_cards import get_all_specialized_agent_cards, get_agent_card_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class A2AHandler:
         """Register this agent in the agent registry"""
         try:
             logger.info("Starting agent self-registration...")
-            from agent_card import get_agent_card
+            from .agent_card import get_agent_card
             agent_card_data = get_agent_card()
             logger.info(f"Retrieved agent card data: {agent_card_data.get('agent_id', 'unknown')}")
             

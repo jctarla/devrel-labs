@@ -12,8 +12,11 @@ import sys
 import time
 from datetime import datetime
 
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 try:
-    from OraDBEventLogger import OraDBEventLogger
+    from src.OraDBEventLogger import OraDBEventLogger
 except ImportError:
     print("❌ Error: Could not import OraDBEventLogger")
     print("Make sure Oracle DB credentials are configured in config.yaml")
@@ -129,9 +132,9 @@ def test_event_logging():
     # Test Model Event Logging
     print_section("Testing Model Event Logging")
     
-    print("Logging qwen2 model inference...")
+    print("Logging gemma3:270m model inference...")
     logger.log_model_event(
-        model_name="qwen2",
+        model_name="gemma3:270m",
         model_type="ollama",
         system_prompt="You are a helpful AI assistant.",
         user_prompt="Explain quantum computing in simple terms",

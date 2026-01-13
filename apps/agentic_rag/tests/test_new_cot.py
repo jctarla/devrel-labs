@@ -1,12 +1,14 @@
 import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import argparse
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
-from store import VectorStore
-from rag_agent import RAGAgent
-from local_rag_agent import LocalRAGAgent
+from src.store import VectorStore
+# from rag_agent import RAGAgent # Removed
+from src.local_rag_agent import LocalRAGAgent
 import yaml
 
 # Configure rich console
@@ -50,41 +52,31 @@ def test_multi_agent_cot(agent, query: str, description: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Test multi-agent Chain of Thought reasoning")
-    parser.add_argument("--model", choices=['local', 'openai'], default='local',
-                       help="Choose between local Mistral model or OpenAI (default: local)")
-    parser.add_argument("--store-path", default="chroma_db", help="Path to the vector store")
+    parser.add_argument("--model", default='local', help="Model to use (default: local gemma3:270m)")
+    parser.add_argument("--store-path", default="embeddings", help="Path to the vector store")
     args = parser.parse_args()
     
     # Load environment variables and config
     load_dotenv()
-    
-    try:
-        with open('config.yaml', 'r') as f:
-            config = yaml.safe_load(f)
-            hf_token = config.get('HUGGING_FACE_HUB_TOKEN')
-    except Exception:
-        hf_token = None
     
     console.print("\n[bold]Testing Multi-Agent Chain of Thought System[/bold]")
     console.print("=" * 80)
     
     try:
         # Initialize vector store
-        store = VectorStore(persist_directory=args.store_path)
+        # Try Oracle first, then Chroma
+        try:
+            from src.OraDBVectorStore import OraDBVectorStore
+            store = OraDBVectorStore()
+            console.print("[green]Using Oracle DB Vector Store[/green]")
+        except ImportError:
+            store = VectorStore(persist_directory=args.store_path)
+            console.print("[yellow]Using ChromaDB Vector Store[/yellow]")
         
         # Initialize appropriate agent
-        if args.model == 'local':
-            if not hf_token:
-                console.print("[red]Error: HuggingFace token not found in config.yaml")
-                sys.exit(1)
-            agent = LocalRAGAgent(store, use_cot=True)
-            model_name = "Mistral-7B"
-        else:
-            if not os.getenv("OPENAI_API_KEY"):
-                console.print("[red]Error: OpenAI API key not found in .env")
-                sys.exit(1)
-            agent = RAGAgent(store, openai_api_key=os.getenv("OPENAI_API_KEY"), use_cot=True)
-            model_name = "GPT-4"
+        # Always use LocalRAGAgent with gemma3:270m
+        agent = LocalRAGAgent(store, model_name="gemma3:270m", use_cot=True)
+        model_name = "gemma3:270m"
         
         console.print(f"\n[bold]Using {model_name} with Multi-Agent CoT[/bold]")
         console.print("=" * 80)

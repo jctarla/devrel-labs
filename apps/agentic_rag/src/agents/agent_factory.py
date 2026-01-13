@@ -1,7 +1,7 @@
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 import logging
 import warnings
 from transformers import logging as transformers_logging
