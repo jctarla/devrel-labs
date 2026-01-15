@@ -205,6 +205,71 @@ class OraDBVectorStore:
         """Query the repository documents collection"""
         return self._query_collection("repository_documents", query, n_results)
 
+    def get_collection_count(self, collection_name: str) -> int:
+        """Get the total number of chunks in a collection"""
+        table_name = self.collections.get(collection_name)
+        if not table_name:
+            return 0
+        try:
+            cursor = self.connection.cursor()
+            # Check if table exists first? Or just try count.
+            # Assuming table exists if it's in our map, otherwise SQL error will be caught.
+            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            result = cursor.fetchone()
+            cursor.close()
+            if result:
+                return result[0]
+            return 0
+        except Exception as e:
+            # Table might not exist yet
+            return 0
+
+    def get_latest_chunk(self, collection_name: str) -> Dict[str, Any]:
+        """Get the most recently added chunk from a collection"""
+        table_name = self.collections.get(collection_name)
+        if not table_name:
+            return {}
+        try:
+            cursor = self.connection.cursor()
+            # Fetch one row. No guarantee of order without timestamp column, 
+            # but ROWNUM 1 gives us *a* chunk.
+            # Using simple query assuming standard columns
+            cursor.execute(f"SELECT text, metadata FROM {table_name} WHERE ROWNUM <= 1")
+            row = cursor.fetchone()
+            cursor.close()
+            
+            if row:
+                text = row[0]
+                metadata = row[1]
+                
+                # Handle LOBs if necessary
+                if hasattr(metadata, 'read'):
+                    metadata = metadata.read()
+                
+                # If metadata is string, valid for return. The caller parses it.
+                return {
+                    "content": text,
+                    "metadata": metadata
+                }
+            return {}
+        except Exception as e:
+            print(f"Error getting chunk from {collection_name}: {e}")
+            return {}
+
+    def check_embedding_model_exists(self, model_name: str = "ALL_MINILM_L12_V2") -> bool:
+        """Check if an ONNX embedding model is loaded in the database"""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT COUNT(*) FROM user_mining_models WHERE model_name = :1", [model_name])
+            result = cursor.fetchone()
+            cursor.close()
+            if result and result[0] > 0:
+                return True
+            return False
+        except Exception as e:
+            print(f"Error checking model {model_name}: {e}")
+            return False
+
 def main():
     parser = argparse.ArgumentParser(description="Manage Oracle DB vector store")
     parser.add_argument("--add", help="JSON file containing chunks to add")

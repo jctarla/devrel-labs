@@ -162,6 +162,20 @@ def test_add_and_query(store, query_text="machine learning"):
     except Exception as e:
         print(f"✗ Test failed: {str(e)}")
         
+def check_onnx_model(store):
+    """Check if the ONNX embedding model is loaded"""
+    if not store:
+        print("Skipping ONNX model check as connection failed")
+        return
+
+    print("\n=== ONNX Model Verification ===")
+    model_name = "ALL_MINILM_L12_V2"
+    if store.check_embedding_model_exists(model_name):
+        print(f"✓ ONNX model '{model_name}' found in database.")
+    else:
+        print(f"✗ ONNX model '{model_name}' NOT found in database.")
+        print("  Please ensure the model is loaded using the load_model.py script.")
+
 def main():
     parser = argparse.ArgumentParser(description="Test Oracle DB Vector Store")
     parser.add_argument("--query", default="machine learning", help="Query to use for testing")
@@ -202,6 +216,9 @@ ORACLE_DB_DSN: your_connection_string_here
     
     # Test connection
     store = test_connection()
+    
+    # Check ONNX model
+    check_onnx_model(store)
     
     # Check collection statistics
     check_collection_stats(store)
