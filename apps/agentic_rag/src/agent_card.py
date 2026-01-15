@@ -5,7 +5,7 @@ This module defines the agent card that describes the capabilities
 and configuration of the agentic_rag system for A2A protocol.
 """
 
-from a2a_models import AgentCard, AgentCapability, AgentEndpoint
+from src.a2a_models import AgentCard, AgentCapability, AgentEndpoint
 
 
 def get_agent_card() -> dict:

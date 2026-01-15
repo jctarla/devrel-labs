@@ -96,7 +96,7 @@ class A2AHandler:
             logger.info(f"Retrieved agent card data: {agent_card_data.get('agent_id', 'unknown')}")
             
             # Convert the agent card data to AgentCard object
-            from a2a_models import AgentCard, AgentCapability, AgentEndpoint
+
             
             # Extract capabilities
             capabilities = []
@@ -348,7 +348,16 @@ class A2AHandler:
     
     def _get_specialized_agent_card(self, agent_id: str) -> dict:
         """Get the agent card for a specialized agent"""
-        from specialized_agent_cards import get_agent_card_by_id
+        try:
+            # Try absolute import from src first (common when running from root)
+            from src.specialized_agent_cards import get_agent_card_by_id
+        except ImportError:
+            try:
+                # Try relative import (if running as package)
+                from .specialized_agent_cards import get_agent_card_by_id
+            except ImportError:
+                 # Last resort: direct import (if src is in path)
+                 from specialized_agent_cards import get_agent_card_by_id
         return get_agent_card_by_id(agent_id, self.agent_endpoints)
     
     async def handle_agent_query(self, params: Dict[str, Any]) -> Dict[str, Any]:

@@ -92,7 +92,7 @@ class PDFProcessor:
             for chunk_size in [200, 150, 100, 75]:
                 chunks = self._try_chunk_with_size(conv_result.document, chunk_size)
                 if chunks:
-                    print(f"Successfully chunked with size {chunk_size}")
+                    print(f"Successfully chunked with size {chunk_size} (Count: {len(chunks)})")
                     break
             
             if not chunks:

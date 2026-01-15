@@ -10,7 +10,7 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional
-from a2a_models import TaskInfo, TaskStatus
+from src.a2a_models import TaskInfo, TaskStatus
 
 logger = logging.getLogger(__name__)
 

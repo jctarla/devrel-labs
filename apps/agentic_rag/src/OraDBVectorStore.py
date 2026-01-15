@@ -126,7 +126,9 @@ class OraDBVectorStore:
         metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
         
         # OracleVS add_texts
+        print(f"🔄 [OraDB] Inserting {len(chunks)} chunks into {collection_name}...")
         store.add_texts(texts=texts, metadatas=metadatas)
+        print(f"✅ [OraDB] Successfully inserted {len(chunks)} chunks.")
 
     def add_pdf_chunks(self, chunks: List[Dict[str, Any]], document_id: str):
         """Add chunks from a PDF document to the vector store"""

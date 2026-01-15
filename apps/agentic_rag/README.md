@@ -425,6 +425,62 @@ Query a specific collection:
 python -m src.local_rag_agent --query "How to implement a queue?" --collection "Repository Collection"
 ```
 
+## Annex: Gradio Interface Instructions
+
+### 1. Document Processing
+- **Upload PDFs** using the file uploader.
+- **Process web content** by entering URLs.
+- **Process repositories** by entering paths or GitHub URLs.
+- All processed content is added to the knowledge base.
+
+### 2. Standard Chat Interface
+- Quick responses without detailed reasoning steps.
+- Select your preferred agent (Ollama gemma3 by default).
+- Select which knowledge collection to query:
+  - **PDF Collection**: Always searches PDF documents.
+  - **Repository Collection**: Always searches code repositories.
+  - **Web Knowledge Base**: Always searches web content.
+  - **General Knowledge**: Uses the model's built-in knowledge without searching collections.
+
+### 3. Chain of Thought Chat Interface
+- Detailed responses with step-by-step reasoning.
+- See the planning, research, reasoning, and synthesis steps.
+- Great for complex queries or when you want to understand the reasoning process.
+- May take longer but provides more detailed and thorough answers.
+- Same collection selection options as the Standard Chat Interface.
+
+### 4. A2A Chat Interface
+- Same chat experience as standard interfaces but uses A2A protocol.
+- **Granular Execution Trace**: Displays step-by-step execution including Orchestrator logic, Agent Selection, and detailed intermediate steps.
+- **Real Vector Retrieval**: Shows actual retrieved content from the knowledge base during the Research phase, not just final answers.
+- **Prerequisites**: A2A server must be running (`python main.py` on port 8000).
+- **Agent-to-Agent Communication**: All queries go through A2A protocol.
+- **Collection Support**: PDF, Repository, Web, and General Knowledge collections.
+- **Chain of Thought**: Step-by-step reasoning through A2A.
+- **Status Monitoring**: Check A2A server connectivity.
+- **Same UI**: Familiar chat interface with A2A backend.
+
+### 5. A2A Protocol Testing
+- Test the Agent2Agent (A2A) protocol functionality.
+- **Prerequisites**: A2A server must be running (`python main.py` on port 8000).
+- **Health Check**: Verify A2A server connectivity.
+- **Agent Card**: Get agent capability information.
+- **Agent Discovery**: Find agents with specific capabilities.
+- **Document Query**: Test A2A document querying with different collections.
+- **Task Management**: Create, monitor, and track long-running tasks.
+- **Task Dashboard**: View all tracked tasks and their statuses.
+- **Complete Test Suite**: Run all A2A tests in sequence.
+
+### 6. Performance Expectations
+- **Default Model**: gemma3:270m (Ollama) - Optimized for speed and quality.
+- **Other Ollama models**: Supported if installed via `ollama pull`.
+- **A2A requests**: Depends on A2A server performance and network latency.
+
+> **Note**: The interface will automatically detect available models based on your configuration:
+> - `gemma3:270m` is the default option (requires Ollama to be installed and running).
+> - Other Ollama models can be selected if available.
+> - A2A testing requires the A2A server to be running separately.
+
 ## 5. Agent2Agent (A2A) Protocol Integration
 
 The agentic_rag system now includes full support for the Agent2Agent (A2A) protocol, enabling seamless communication and collaboration with other AI agents. This integration transforms the system into an interoperable agent that can participate in multi-agent workflows and ecosystems.

@@ -10,7 +10,7 @@ This module defines agent cards for the specialized Chain of Thought agents:
 Each agent can be deployed independently and communicate via A2A protocol.
 """
 
-from a2a_models import AgentCard, AgentCapability, AgentEndpoint
+from src.a2a_models import AgentCard, AgentCapability, AgentEndpoint
 from typing import Dict
 
 
@@ -304,7 +304,14 @@ def get_synthesizer_agent_card(base_url: str = "http://localhost:8000") -> dict:
 
 
 def get_all_specialized_agent_cards(config: Dict[str, str] = None) -> Dict[str, dict]:
-    """Get all specialized agent cards with their configured URLs"""
+    """Get all specialized agent cards with their configured URLs
+    
+    Returns 2 agents of each type:
+    - Planner: planner_agent_v1, planner_agent_v2 (Fast)
+    - Researcher: researcher_agent_v1 (Web), researcher_agent_v2 (Vector)
+    - Reasoner: reasoner_agent_v1 (DeepThink), reasoner_agent_v2 (QuickLogic)
+    - Synthesizer: synthesizer_agent_v1 (Creative), synthesizer_agent_v2 (Concise)
+    """
     
     if config is None:
         config = {
@@ -314,11 +321,52 @@ def get_all_specialized_agent_cards(config: Dict[str, str] = None) -> Dict[str, 
             "synthesizer_url": "http://localhost:8000"
         }
     
+    # Base agents
+    planner_v1 = get_planner_agent_card(config.get("planner_url", "http://localhost:8000"))
+    researcher_v1 = get_researcher_agent_card(config.get("researcher_url", "http://localhost:8000"))
+    reasoner_v1 = get_reasoner_agent_card(config.get("reasoner_url", "http://localhost:8000"))
+    synthesizer_v1 = get_synthesizer_agent_card(config.get("synthesizer_url", "http://localhost:8000"))
+    
+    # Create variations
+    
+    # Planner v2 - Fast
+    planner_v2 = planner_v1.copy()
+    planner_v2["agent_id"] = "planner_agent_v2"
+    planner_v2["name"] = "Fast Planner Agent"
+    planner_v2["metadata"]["specialization"] = "fast_planning"
+    planner_v2["metadata"]["personality"] = "efficient, direct, rapid"
+    
+    # Researcher v2 - Local/Vector
+    researcher_v2 = researcher_v1.copy()
+    researcher_v2["agent_id"] = "researcher_agent_v2"
+    researcher_v2["name"] = "Local Knowledge Researcher"
+    researcher_v2["description"] = "Specialized agent for deep searches within local vector stores and PDF documents."
+    researcher_v2["metadata"]["specialization"] = "vector_store_research"
+    
+    # Reasoner v2 - QuickLogic
+    reasoner_v2 = reasoner_v1.copy()
+    reasoner_v2["agent_id"] = "reasoner_agent_v2"
+    reasoner_v2["name"] = "Quick Logic Reasoner"
+    reasoner_v2["description"] = "Optimized for rapid logical deductions and quick sanity checks."
+    reasoner_v2["metadata"]["specialization"] = "fast_reasoning"
+    
+    # Synthesizer v2 - Concise
+    synthesizer_v2 = synthesizer_v1.copy()
+    synthesizer_v2["agent_id"] = "synthesizer_agent_v2"
+    synthesizer_v2["name"] = "Concise Synthesizer"
+    synthesizer_v2["description"] = "Produces brief, to-the-point summaries and answers."
+    synthesizer_v2["metadata"]["specialization"] = "concise_synthesis"
+    synthesizer_v2["metadata"]["personality"] = "brief, direct, factual"
+    
     return {
-        "planner_agent_v1": get_planner_agent_card(config.get("planner_url", "http://localhost:8000")),
-        "researcher_agent_v1": get_researcher_agent_card(config.get("researcher_url", "http://localhost:8000")),
-        "reasoner_agent_v1": get_reasoner_agent_card(config.get("reasoner_url", "http://localhost:8000")),
-        "synthesizer_agent_v1": get_synthesizer_agent_card(config.get("synthesizer_url", "http://localhost:8000"))
+        "planner_agent_v1": planner_v1,
+        "planner_agent_v2": planner_v2,
+        "researcher_agent_v1": researcher_v1,
+        "researcher_agent_v2": researcher_v2,
+        "reasoner_agent_v1": reasoner_v1,
+        "reasoner_agent_v2": reasoner_v2,
+        "synthesizer_agent_v1": synthesizer_v1,
+        "synthesizer_agent_v2": synthesizer_v2
     }
 
 

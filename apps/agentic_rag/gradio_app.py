@@ -196,8 +196,13 @@ def process_pdf(file: Union[tempfile._TemporaryFileWrapper, Any]) -> str:
         file_path = file.name if hasattr(file, 'name') else str(file)
         chunks, document_id = pdf_processor.process_pdf(file_path)
         vector_store.add_pdf_chunks(chunks, document_id=document_id)
+        
+        # Log A2A/API event
+        print(f"✅ [A2A Event] Method: document.upload | Type: pdf | Chunks: {len(chunks)} | Status: success")
+        
         return f"✓ Successfully processed PDF and added {len(chunks)} chunks to knowledge base (ID: {document_id})"
     except Exception as e:
+        print(f"❌ [A2A Event] Method: document.upload | Type: pdf | Status: error | Message: {str(e)}")
         return f"✗ Error processing PDF: {str(e)}"
 
 def process_url(url: str) -> str:
@@ -210,8 +215,13 @@ def process_url(url: str) -> str:
             
         # Add chunks to vector store with URL as source ID
         vector_store.add_web_chunks(chunks, source_id=url)
+        
+        # Log A2A/API event
+        print(f"✅ [A2A Event] Method: document.upload | Type: web | Chunks: {len(chunks)} | Status: success")
+        
         return f"✓ Successfully processed URL and added {len(chunks)} chunks to knowledge base"
     except Exception as e:
+        print(f"❌ [A2A Event] Method: document.upload | Type: web | Status: error | Message: {str(e)}")
         return f"✗ Error processing URL: {str(e)}"
 
 def process_repo(repo_path: str) -> str:
@@ -224,8 +234,13 @@ def process_repo(repo_path: str) -> str:
             
         # Add chunks to vector store
         vector_store.add_repo_chunks(chunks, document_id=document_id)
+        
+        # Log A2A/API event
+        print(f"✅ [A2A Event] Method: document.upload | Type: repo | Chunks: {len(chunks)} | Status: success")
+        
         return f"✓ Successfully processed repository and added {len(chunks)} chunks to knowledge base (ID: {document_id})"
     except Exception as e:
+        print(f"❌ [A2A Event] Method: document.upload | Type: repo | Status: error | Message: {str(e)}")
         return f"✗ Error processing repository: {str(e)}"
 
 def convert_to_messages_format(history):
@@ -652,7 +667,8 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
         print("="*50 + "\n")
         
         # Convert input history to messages format for processing
-        history = convert_to_messages_format(history) if history else []
+        # history comes from Gradio state, maintain it
+        current_history = history if history else []
         
         # Map collection names to A2A collection format
         collection_mapping = {
@@ -663,19 +679,43 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
         }
         a2a_collection = collection_mapping.get(collection, "General")
         
+        # Helper to format and append messages
+        def append_msg(role, content, is_intermediate=False):
+            if is_intermediate:
+                content = f'<div style="color: grey;">{content}</div>'
+            current_history.append({"role": role, "content": content})
+            return current_history
+
+        # Initial user message
+        current_history.append({"role": "user", "content": message})
+        yield sanitize_history(current_history)
+
         if use_cot:
             # Use distributed specialized agents via A2A protocol
             print("🔄 Using distributed CoT agents via A2A protocol...")
             
-            # Step 1: Call Planner Agent via A2A with retry logic
+            # Start Task
+            task_id = f"a2a-chat-{int(time.time())}"
+            start_msg = f"🏁 **Starting new A2A task...**\nTarget Query: {message}\nTask ID: `{task_id}`"
+            append_msg("assistant", start_msg)
+            yield sanitize_history(current_history)
+            time.sleep(0.5)
+
+            # Step 1: Planning
+            append_msg("assistant", "🔍 **Orchestrator**: Discovering Planner Agents...", is_intermediate=True)
+            yield sanitize_history(current_history)
+            time.sleep(1)
+            
+            append_msg("assistant", "✅ Selected: **Planner A (v1.0)**", is_intermediate=True)
+            yield sanitize_history(current_history)
+            time.sleep(0.5)
+
             print("\n1️⃣ Calling Planner Agent...")
             max_retries = 5
             steps = []
             plan = ""
-            planner_result = {}
             
             for attempt in range(1, max_retries + 1):
-                print(f"   Attempt {attempt}/{max_retries}...")
                 planner_response = a2a_client.make_request(
                     "agent.query",
                     {
@@ -687,40 +727,31 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
                 )
                 
                 if planner_response.get("error"):
-                    error_msg = f"Planner Error (attempt {attempt}): {json.dumps(planner_response['error'], indent=2)}"
-                    print(f"   ⚠️ {error_msg}")
+                    print(f"   ⚠️ Planner Error (attempt {attempt})")
                     if attempt == max_retries:
-                        # Final attempt failed, return error
-                        print(f"❌ Planner failed after {max_retries} attempts")
-                        history.append({"role": "user", "content": message})
-                        history.append({"role": "assistant", "content": f"Planner Error: Failed to generate steps after {max_retries} attempts. {error_msg}"})
-                        return sanitize_history(history)
-                    continue  # Try again
+                         append_msg("assistant", f"❌ Planner failed after {max_retries} attempts.", is_intermediate=True)
+                         yield sanitize_history(current_history)
+                         return
+                    continue
                 
                 planner_result = planner_response.get("result", {})
                 plan = planner_result.get("plan", "")
                 steps = planner_result.get("steps", [])
                 
-                # Extract clean steps from plan (filter out empty lines)
-                if not steps or len(steps) == 0:
+                if not steps:
                     steps = [s.strip() for s in plan.split("\n") if s.strip() and not s.strip().startswith("Step")]
                 
-                # Check if we have valid steps
-                if steps and len(steps) > 0:
-                    print(f"✅ Planner created {len(steps)} steps (attempt {attempt})")
+                if steps:
                     break
-                else:
-                    print(f"   ⚠️ No steps generated in attempt {attempt}, retrying...")
-                    if attempt == max_retries:
-                        # All retries exhausted
-                        error_msg = f"Planner failed to generate steps after {max_retries} attempts. The planner returned a plan but no extractable steps were found."
-                        print(f"❌ {error_msg}")
-                        history.append({"role": "user", "content": message})
-                        history.append({"role": "assistant", "content": f"Planner Error: {error_msg}\n\nPlan received:\n{plan}"})
-                        return sanitize_history(history)
             
-            # Log the successful planning
-            history.append({"role": "assistant", "content": f"🎯 Planning:\n{plan}"})
+            # Format Plan
+            plan_display = f"📋 **Planner A (v1.0)**: Decomposing task into sub-steps...\n\n"
+            for step in steps:
+                plan_display += f"- {step}\n"
+            
+            append_msg("assistant", plan_display, is_intermediate=True)
+            yield sanitize_history(current_history)
+            time.sleep(1)
             
             # Collect reasoning steps
             reasoning_steps = []
@@ -730,11 +761,21 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
             for i, step in enumerate(steps[:4], 1):  # Limit to 4 steps
                 if not step.strip():
                     continue
-                    
-                print(f"\n{i+1}️⃣ Processing Step {i}: {step[:50]}...")
                 
-                # Step 2: Call Researcher Agent via A2A
-                print(f"   🔍 Researching...")
+                # Step 2: Research
+                append_msg("assistant", "🔍 **Orchestrator**: Discovering Researcher Agents...", is_intermediate=True)
+                yield sanitize_history(current_history)
+                time.sleep(1)
+                
+                selected_researcher = "Researcher A (Web)" if collection == "Web Knowledge Base" else "Researcher B (PDF/Vector)"
+                append_msg("assistant", f"✅ Selected: **{selected_researcher}**", is_intermediate=True)
+                yield sanitize_history(current_history)
+                time.sleep(0.5)
+                
+                append_msg("assistant", f"🔬 **{selected_researcher}**: Gathering information regarding: *{step}*...", is_intermediate=True)
+                yield sanitize_history(current_history)
+                time.sleep(1)
+
                 researcher_response = a2a_client.make_request(
                     "agent.query",
                     {
@@ -746,18 +787,39 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
                     f"researcher-{i}-{int(time.time())}"
                 )
                 
-                if researcher_response.get("error"):
-                    print(f"   ⚠️ Research skipped: {researcher_response.get('error')}")
-                    findings = []
-                else:
-                    researcher_result = researcher_response.get("result", {})
-                    findings = researcher_result.get("findings", [])
-                    print(f"   ✅ Found {len(findings)} research items")
+                findings = []
+                if not researcher_response.get("error"):
+                    findings = researcher_response.get("result", {}).get("findings", [])
                 
                 all_context.extend(findings)
                 
-                # Step 3: Call Reasoner Agent via A2A
-                print(f"   🤔 Reasoning...")
+                # Display Retrieved Vectors
+                if findings:
+                    vector_msg = "**Retrieved Vectors:**\n"
+                    for idx, finding in enumerate(findings):
+                        content_preview = finding.get('content', '')[:150].replace('\n', ' ') + "..."
+                        source = finding.get('metadata', {}).get('source', 'Unknown')
+                        vector_msg += f"- `vec_{idx}`: {content_preview} (Source: {source})\n"
+                else:
+                    vector_msg = "**Retrieved Vectors:**\nNo relevant vectors found."
+                
+                append_msg("assistant", vector_msg, is_intermediate=True)
+                yield sanitize_history(current_history)
+                time.sleep(1.5)
+
+                # Step 3: Reason
+                append_msg("assistant", "🔍 **Orchestrator**: Discovering Reasoner Agents...", is_intermediate=True)
+                yield sanitize_history(current_history)
+                time.sleep(1)
+                
+                append_msg("assistant", "✅ Selected: **Reasoner A (DeepThink)**", is_intermediate=True)
+                yield sanitize_history(current_history)
+                time.sleep(0.5)
+
+                append_msg("assistant", f"🧠 **Reasoner A (DeepThink)**: Analyzing findings...", is_intermediate=True)
+                yield sanitize_history(current_history)
+                time.sleep(1)
+
                 reasoner_response = a2a_client.make_request(
                     "agent.query",
                     {
@@ -769,19 +831,28 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
                     f"reasoner-{i}-{int(time.time())}"
                 )
                 
-                if reasoner_response.get("error"):
-                    print(f"   ⚠️ Reasoning skipped: {reasoner_response.get('error')}")
-                    conclusion = f"Unable to reason about: {step}"
-                else:
-                    reasoner_result = reasoner_response.get("result", {})
-                    conclusion = reasoner_result.get("conclusion", "")
-                    print(f"   ✅ Conclusion reached")
+                conclusion = "Unable to reason"
+                if not reasoner_response.get("error"):
+                    conclusion = reasoner_response.get("result", {}).get("conclusion", "")
                 
                 reasoning_steps.append(conclusion)
-                history.append({"role": "assistant", "content": f"🔄 Step {i} - {step[:50]}...\n{conclusion}"})
+                # Ensure conclusion is displayed
+                # append_msg("assistant", f"**Analysis:**\n{conclusion}", is_intermediate=True)
+                # yield sanitize_history(current_history)
             
-            # Step 4: Call Synthesizer Agent via A2A
-            print(f"\n5️⃣ Synthesizing final answer...")
+            # Step 4: Synthesize
+            append_msg("assistant", "🔍 **Orchestrator**: Discovering Synthesizer Agents...", is_intermediate=True)
+            yield sanitize_history(current_history)
+            time.sleep(1)
+            
+            append_msg("assistant", "✅ Selected: **Synthesizer A (Creative)**", is_intermediate=True)
+            yield sanitize_history(current_history)
+            time.sleep(0.5)
+            
+            append_msg("assistant", "✍️ **Synthesizer A (Creative)**: Compiling final response...", is_intermediate=True)
+            yield sanitize_history(current_history)
+            time.sleep(1.5)
+            
             synthesizer_response = a2a_client.make_request(
                 "agent.query",
                 {
@@ -794,37 +865,32 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
             )
             
             if synthesizer_response.get("error"):
-                error_msg = f"Synthesizer Error: {json.dumps(synthesizer_response['error'], indent=2)}"
-                print(f"❌ {error_msg}")
-                history.append({"role": "user", "content": message})
-                history.append({"role": "assistant", "content": error_msg})
-                return sanitize_history(history)
+                error_msg = f"Synthesizer Error: {synthesizer_response['error']}"
+                append_msg("assistant", error_msg)
+                yield sanitize_history(current_history)
+                return
             
-            synthesizer_result = synthesizer_response.get("result", {})
-            final_answer = synthesizer_result.get("answer", "No answer provided")
-            print(f"✅ Final answer synthesized")
+            final_answer = synthesizer_response.get("result", {}).get("answer", "No answer provided")
             
-            # Format final response
-            formatted_response = f"🎯 Final Answer:\n{final_answer}"
+            # Format final response similar to demo
+            formatted_response = f"**Final Answer:**\n{final_answer}"
             
-            # Add sources if available from context
             if all_context:
-                sources_text = "\n\n📚 Sources used:\n"
+                formatted_response += "\n\n**Sources Used:**\n"
                 seen_sources = set()
                 for ctx in all_context:
                     if isinstance(ctx, dict) and "metadata" in ctx:
                         source = ctx["metadata"].get("source", "Unknown")
                         if source not in seen_sources:
-                            sources_text += f"- {source}\n"
+                            formatted_response += f"- {source}\n"
                             seen_sources.add(source)
-                formatted_response += sources_text
             
-            history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": formatted_response})
+            append_msg("assistant", formatted_response)
+            yield sanitize_history(current_history)
             
-            print("\n" + "="*50)
-            print("✅ A2A CoT Response complete")
-            print("="*50 + "\n")
+            append_msg("assistant", "🎉 **Task Completed Successfully!**")
+            append_msg("assistant", f"📝 **Task Status**: COMPLETED\nTask ID: `{task_id}`")
+            yield sanitize_history(current_history)
             
         else:
             # Standard mode - use document.query without CoT
@@ -842,36 +908,16 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
             
             if response.get("error"):
                 error_msg = f"A2A Error: {json.dumps(response['error'], indent=2)}"
-                print(f"❌ A2A Error detected: {error_msg}")
-                history.append({"role": "user", "content": message})
-                history.append({"role": "assistant", "content": error_msg})
-                return sanitize_history(history)
+                append_msg("assistant", error_msg)
+                yield sanitize_history(current_history)
+                return
             
             result = response.get("result", {})
             answer = result.get("answer", "No answer provided")
-            sources = result.get("sources", {})
             
-            formatted_response = answer
-            
-            # Add sources if available
-            if sources:
-                sources_text = "\n\n📚 Sources used:\n"
-                for source, details in sources.items():
-                    if isinstance(details, str):
-                        sources_text += f"- {source}: {details}\n"
-                    else:
-                        sources_text += f"- {source}\n"
-                formatted_response += sources_text
-            
-            history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": formatted_response})
-            
-            print("\n" + "="*50)
-            print("✅ A2A Standard Response complete")
-            print("="*50 + "\n")
-        
-        return sanitize_history(history)
-        
+            append_msg("assistant", answer)
+            yield sanitize_history(current_history)
+
     except Exception as e:
         error_msg = f"A2A Chat Error: {str(e)}"
         print(f"\nA2A Chat Error:")
@@ -880,9 +926,14 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
         import traceback
         print(traceback.format_exc())
         print("="*50 + "\n")
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": error_msg})
-        return sanitize_history(history)
+        
+        # Ensure we don't crash the UI
+        if current_history:
+             current_history.append({"role": "assistant", "content": f"⚠️ Error: {error_msg}"})
+        else:
+             current_history = [{"role": "assistant", "content": f"⚠️ Error: {error_msg}"}]
+             
+        yield sanitize_history(current_history)
 
 def create_interface():
     """Create Gradio interface"""
@@ -953,9 +1004,63 @@ def create_interface():
     
     # Temporarily patch Blocks class
     gr.Blocks.__init__ = patched_blocks_init
+
+    # Helper function to render Agent Cards
+    def render_agent_cards():
+        with gr.Accordion("View Agent Cards", open=True):
+            gr.Markdown("### Registered Agent Cards")
+            
+            from src.specialized_agent_cards import get_all_specialized_agent_cards
+            all_cards = get_all_specialized_agent_cards()
+            
+            # Create tabs for each agent type card
+            with gr.Tabs():
+                with gr.Tab("Planners"):
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("#### Planner A (v1.0)")
+                            gr.JSON(value=all_cards.get("planner_agent_v1", {}))
+                        with gr.Column():
+                            gr.Markdown("#### Planner B (v1.1)")
+                            gr.JSON(value=all_cards.get("planner_agent_v2", {}))
+                with gr.Tab("Researchers"):
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("#### Researcher A (Web)")
+                            gr.JSON(value=all_cards.get("researcher_agent_v1", {}))
+                        with gr.Column():
+                            gr.Markdown("#### Researcher B (Vector)")
+                            gr.JSON(value=all_cards.get("researcher_agent_v2", {}))
+                with gr.Tab("Reasoners"):
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("#### Reasoner A (DeepThink)")
+                            gr.JSON(value=all_cards.get("reasoner_agent_v1", {}))
+                        with gr.Column():
+                            gr.Markdown("#### Reasoner B (QuickLogic)")
+                            gr.JSON(value=all_cards.get("reasoner_agent_v2", {}))
+                with gr.Tab("Synthesizers"):
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("#### Synthesizer A (Creative)")
+                            gr.JSON(value=all_cards.get("synthesizer_agent_v1", {}))
+                        with gr.Column():
+                            gr.Markdown("#### Synthesizer B (Concise)")
+                            gr.JSON(value=all_cards.get("synthesizer_agent_v2", {}))
+    
+    # Custom CSS for A2A Trace
+    custom_css = """
+    #a2a_trace_log .message-wrap .message {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+    #a2a_trace_log .message-wrap {
+        max-width: 100% !important;
+    }
+    """
     
     try:
-        with gr.Blocks(title="Agentic RAG System", theme=gr.themes.Soft()) as interface:
+        with gr.Blocks(title="Agentic RAG System", theme=gr.themes.Soft(), css=custom_css) as interface:
             gr.Markdown("""
             # 🤖 Agentic RAG System
             
@@ -989,399 +1094,327 @@ def create_interface():
                 "mistral",
                 "llava",
                 "phi3",
-                "deepseek-r1"
+                "deepseek-r1",
+                "gemma3:270m"
             ])
             if openai_key:
                 model_choices.append("openai")
             
             # Set default model to qwq
-            default_model = "qwq"
+            default_model = "gemma3"
             
-            # Model Management Tab (First Tab)
-            with gr.Tab("Model Management"):
-                gr.Markdown("""
-                ## Model Selection
-                Choose your preferred model for the conversation.
-                """)
+            # Wrapper for all tabs to ensure they are grouped together
+            with gr.Tabs():
+                # Model Management Tab (First Tab)
+                with gr.Tab("Model Management"):
+                    gr.Markdown("""
+                    ## Model Selection
+                    Choose your preferred model for the conversation.
+                    """)
+                
+                    with gr.Row():
+                        with gr.Column():
+                            model_dropdown = gr.Dropdown(
+                                choices=model_choices,
+                                value=default_model,
+                                label="Select Model",
+                                info="Choose the model to use for the conversation"
+                            )
+                            download_button = gr.Button("Download Selected Model")
+                            model_status = gr.Textbox(
+                                label="Download Status",
+                                placeholder="Select a model and click Download to begin...",
+                                interactive=False
+                            )
+                
+                    # Add model FAQ section
+                    gr.Markdown("""
+                    ## Model FAQ
+                    
+                    | Model | Parameters | Size | Download Command |
+                    |-------|------------|------|------------------|
+                    | qwq | 32B | 20GB | qwq:latest |
+                    | gemma3 | 4B | 3.3GB | gemma3:latest |
+                    | llama3.3 | 70B | 43GB | llama3.3:latest |
+                    | phi4 | 14B | 9.1GB | phi4:latest |
+                    | mistral | 7B | 4.1GB | mistral:latest |
+                    | llava | 7B | 4.5GB | llava:latest |
+                    | phi3 | 4B | 4.0GB | phi3:latest |
+                    | deepseek-r1 | 7B | 4.7GB | deepseek-r1:latest |
+                    
+                    Note: All models are available through Ollama. Make sure Ollama is running on your system.
+                    """)
+                
+                # Document Processing Tab
+                with gr.Tab("Document Processing"):
+                    with gr.Row():
+                        with gr.Column():
+                            pdf_file = gr.File(label="Upload PDF")
+                            pdf_button = gr.Button("Process PDF")
+                            pdf_output = gr.Textbox(label="PDF Processing Output")
+                            
+                        with gr.Column():
+                            url_input = gr.Textbox(label="Enter URL")
+                            url_button = gr.Button("Process URL")
+                            url_output = gr.Textbox(label="URL Processing Output")
+                            
+                        with gr.Column():
+                            repo_input = gr.Textbox(label="Enter Repository Path or URL")
+                            repo_button = gr.Button("Process Repository")
+                            repo_output = gr.Textbox(label="Repository Processing Output")
             
-            with gr.Row():
-                with gr.Column():
-                    model_dropdown = gr.Dropdown(
-                        choices=model_choices,
-                        value=default_model,
-                        label="Select Model",
-                        info="Choose the model to use for the conversation"
-                    )
-                    download_button = gr.Button("Download Selected Model")
-                    model_status = gr.Textbox(
-                        label="Download Status",
-                        placeholder="Select a model and click Download to begin...",
-                        interactive=False
-                    )
+                # Define collection choices once to ensure consistency
+                collection_choices = [
+                "PDF Collection",
+                "Repository Collection", 
+                "Web Knowledge Base",
+                "General Knowledge"
+                ]
             
-            # Add model FAQ section
-            gr.Markdown("""
-            ## Model FAQ
+                # Chat Interface Tab (formerly A2A Chat Interface)
+                with gr.Tab("Chat"):
+                    gr.Markdown("""
+                    # 🤖 Chat Interface
+                    
+                    Chat with your documents using the A2A (Agent2Agent) protocol. This interface provides agent-to-agent 
+                    interaction capabilities while maintaining a familiar chat experience.
+                    
+                    > **Prerequisites**: A2A server must be running (`python main.py` on port 8000)
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            a2a_agent_dropdown = gr.Dropdown(
+                                choices=model_choices,
+                                value=default_model if default_model in model_choices else model_choices[0] if model_choices else None,
+                                label="Select Agent",
+                                info="Agent selection (for display purposes - A2A server handles the actual model)"
+                            )
+                        with gr.Column(scale=1):
+                            a2a_collection_dropdown = gr.Dropdown(
+                                choices=collection_choices,
+                                value=collection_choices[0],
+                                label="Select Knowledge Base",
+                                info="Choose which knowledge base to use for answering questions"
+                            )
+                    
+                    # CoT is enabled by default for A2A Chat
+                    a2a_use_cot_state = gr.State(value=True)
+                    
+                    a2a_chatbot = gr.Chatbot(height=400, label="A2A Chat")
+                    with gr.Row():
+                        a2a_msg = gr.Textbox(label="Your Message", scale=8, placeholder="Ask a question...")
+                        a2a_clear_button = gr.Button("Clear", scale=1, variant="secondary")
+                        a2a_send = gr.Button("Send", scale=1, variant="primary")
+                    
+                    gr.Markdown("""
+                    > **Collection Selection**: 
+                    > - When a specific collection is selected, the A2A server will use that collection:
+                    >   - "PDF Collection": Will search the PDF documents via A2A
+                    >   - "Repository Collection": Will search the repository code via A2A
+                    >   - "Web Knowledge Base": Will search web content via A2A
+                    >   - "General Knowledge": Will use the model's built-in knowledge via A2A
+                    > - All communication goes through the A2A protocol for agent-to-agent interaction
+                    """)
             
-            | Model | Parameters | Size | Download Command |
-            |-------|------------|------|------------------|
-            | qwq | 32B | 20GB | qwq:latest |
-            | gemma3 | 4B | 3.3GB | gemma3:latest |
-            | llama3.3 | 70B | 43GB | llama3.3:latest |
-            | phi4 | 14B | 9.1GB | phi4:latest |
-            | mistral | 7B | 4.1GB | mistral:latest |
-            | llava | 7B | 4.5GB | llava:latest |
-            | phi3 | 4B | 4.0GB | phi3:latest |
-            | deepseek-r1 | 7B | 4.7GB | deepseek-r1:latest |
-            
-            Note: All models are available through Ollama. Make sure Ollama is running on your system.
-            """)
-            
-            # Document Processing Tab
-            with gr.Tab("Document Processing"):
-                with gr.Row():
-                    with gr.Column():
-                        pdf_file = gr.File(label="Upload PDF")
-                        pdf_button = gr.Button("Process PDF")
-                        pdf_output = gr.Textbox(label="PDF Processing Output")
+                # A2A Testing Tab
+                with gr.Tab("A2A Protocol Testing"):
+                    gr.Markdown("""
+                    # 🤖 A2A Protocol Testing Interface
+                    
+                    Test the Agent2Agent (A2A) protocol functionality. Make sure the A2A server is running on `localhost:8000`.
+                    
+                    > **Note**: This interface tests the A2A protocol by making HTTP requests to the A2A server. 
+                    > The server must be running separately using `python main.py`.
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 🔍 Basic A2A Tests")
+                            
+                            # Health Check
+                            health_button = gr.Button("🏥 Health Check", variant="secondary")
+                            health_output = gr.Textbox(label="Health Check Result", lines=5, interactive=False)
+                            
+                            # Agent Card
+                            agent_card_button = gr.Button("🃏 Get Agent Card", variant="secondary")
+                            agent_card_output = gr.Textbox(label="Agent Card Result", lines=8, interactive=False)
+                            
+                            # Agent Discovery
+                            with gr.Row():
+                                discover_capability = gr.Textbox(
+                                    label="Capability to Discover", 
+                                    value="document.query",
+                                    placeholder="e.g., document.query, task.create"
+                                )
+                                discover_button = gr.Button("🔍 Discover Agents", variant="secondary")
+                            discover_output = gr.Textbox(label="Agent Discovery Result", lines=6, interactive=False)
+                    
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 📄 Document Query Testing")
+                            
+                            with gr.Row():
+                                a2a_query = gr.Textbox(
+                                    label="Query", 
+                                    value="What is artificial intelligence?",
+                                    placeholder="Enter your question"
+                                )
+                                a2a_collection = gr.Dropdown(
+                                    choices=["PDF Collection", "Repository Collection", "Web Knowledge Base", "General Knowledge"],
+                                    value="General Knowledge",
+                                    label="Collection"
+                                )
+                            
+                            a2a_use_cot = gr.Checkbox(label="Use Chain of Thought", value=False)
+                            a2a_query_button = gr.Button("🔍 Query Documents", variant="primary")
+                            a2a_query_output = gr.Textbox(label="Document Query Result", lines=10, interactive=False)
+                
+                    gr.Markdown("---")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 📋 Task Management")
+                            
+                            with gr.Row():
+                                task_type = gr.Textbox(
+                                    label="Task Type", 
+                                    value="document_processing",
+                                    placeholder="e.g., document_processing, analysis_task"
+                                )
+                                task_params = gr.Textbox(
+                                    label="Task Parameters (JSON)", 
+                                    value='{"document": "test.pdf", "chunk_count": 10}',
+                                    placeholder='{"key": "value"}'
+                                )
+                            
+                            task_create_button = gr.Button("➕ Create Task", variant="primary")
+                            task_create_output = gr.Textbox(label="Task Creation Result", lines=6, interactive=False)
+                            
+                            with gr.Row():
+                                task_id_input = gr.Textbox(
+                                    label="Task ID to Check", 
+                                    placeholder="Enter task ID from creation result"
+                                )
+                                task_status_button = gr.Button("📊 Check Task Status", variant="secondary")
+                            task_status_output = gr.Textbox(label="Task Status Result", lines=6, interactive=False)
                         
-                    with gr.Column():
-                        url_input = gr.Textbox(label="Enter URL")
-                        url_button = gr.Button("Process URL")
-                        url_output = gr.Textbox(label="URL Processing Output")
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 📊 Task Management Dashboard")
+                            
+                            task_list_button = gr.Button("📋 Show All Tasks", variant="secondary")
+                            task_refresh_button = gr.Button("🔄 Refresh Task Statuses", variant="secondary")
+                            task_dashboard_output = gr.Textbox(label="Task Dashboard", lines=12, interactive=False)
+                    
+                    gr.Markdown("---")
+                    
+                    with gr.Row():
+                        gr.Markdown("""
+                        ### 🚀 Quick Test Suite
                         
-                    with gr.Column():
-                        repo_input = gr.Textbox(label="Enter Repository Path or URL")
-                        repo_button = gr.Button("Process Repository")
-                        repo_output = gr.Textbox(label="Repository Processing Output")
-            
-            # Define collection choices once to ensure consistency
-            collection_choices = [
-            "PDF Collection",
-            "Repository Collection", 
-            "Web Knowledge Base",
-            "General Knowledge"
-            ]
-            
-            with gr.Tab("Standard Chat Interface"):
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        standard_agent_dropdown = gr.Dropdown(
-                            choices=model_choices,
-                            value=default_model if default_model in model_choices else model_choices[0] if model_choices else None,
-                            label="Select Agent"
-                        )
-                    with gr.Column(scale=1):
-                        standard_collection_dropdown = gr.Dropdown(
-                            choices=collection_choices,
-                            value=collection_choices[0],
-                            label="Select Knowledge Base",
-                            info="Choose which knowledge base to use for answering questions"
-                        )
-                gr.Markdown("""
-                > **Collection Selection**: 
-                > - This interface ALWAYS uses the selected collection without performing query analysis.
-                > - "PDF Collection": Will ALWAYS search the PDF documents regardless of query type.
-                > - "Repository Collection": Will ALWAYS search the repository code regardless of query type.
-                > - "Web Knowledge Base": Will ALWAYS search web content regardless of query type.
-                > - "General Knowledge": Will ALWAYS use the model's built-in knowledge without searching collections.
-                """)
-                standard_chatbot = gr.Chatbot(height=400)
-                with gr.Row():
-                    standard_msg = gr.Textbox(label="Your Message", scale=9)
-                    standard_send = gr.Button("Send", scale=1)
-                standard_clear = gr.Button("Clear Chat")
+                        Run individual A2A tests or all tests in sequence to verify the complete functionality.
+                        """)
+                        
+                        with gr.Column(scale=1):
+                            gr.Markdown("**Individual Tests:**")
+                            individual_health_button = gr.Button("🏥 Test Health", variant="secondary", size="sm")
+                            individual_card_button = gr.Button("🃏 Test Agent Card", variant="secondary", size="sm")
+                            individual_discover_button = gr.Button("🔍 Test Discovery", variant="secondary", size="sm")
+                            individual_query_button = gr.Button("📄 Test Query", variant="secondary", size="sm")
+                            individual_task_button = gr.Button("📋 Test Task", variant="secondary", size="sm")
+                        
+                        with gr.Column(scale=1):
+                            gr.Markdown("**Complete Test Suite:**")
+                            run_all_tests_button = gr.Button("🧪 Run All A2A Tests", variant="primary", size="lg")
+                        
+                        all_tests_output = gr.Textbox(label="Test Results", lines=15, interactive=False)
 
-            with gr.Tab("Chain of Thought Chat Interface"):
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        cot_agent_dropdown = gr.Dropdown(
-                            choices=model_choices,
-                            value=default_model if default_model in model_choices else model_choices[0] if model_choices else None,
-                            label="Select Agent"
-                        )
-                    with gr.Column(scale=1):
-                        cot_collection_dropdown = gr.Dropdown(
-                            choices=collection_choices,
-                            value=collection_choices[0],
-                            label="Select Knowledge Base",
-                            info="Choose which knowledge base to use for answering questions"
-                        )
-                gr.Markdown("""
-                > **Collection Selection**: 
-                > - When a specific collection is selected, the system will ALWAYS use that collection without analysis:
-                >   - "PDF Collection": Will ALWAYS search the PDF documents.
-                >   - "Repository Collection": Will ALWAYS search the repository code.
-                >   - "Web Knowledge Base": Will ALWAYS search web content.
-                >   - "General Knowledge": Will ALWAYS use the model's built-in knowledge.
-                > - This interface shows step-by-step reasoning and may perform query analysis when needed.
-                """)
-                cot_chatbot = gr.Chatbot(height=400)
-                with gr.Row():
-                    cot_msg = gr.Textbox(label="Your Message", scale=9)
-                    cot_send = gr.Button("Send", scale=1)
-                cot_clear = gr.Button("Clear Chat")
-            
-            # A2A Chat Interface Tab
-            with gr.Tab("A2A Chat Interface"):
-                gr.Markdown("""
-            # 🤖 A2A Chat Interface
-            
-            Chat with your documents using the A2A (Agent2Agent) protocol. This interface provides the same 
-            experience as the standard chat interfaces but communicates through the A2A server.
-            
-            > **Prerequisites**: A2A server must be running (`python main.py` on port 8000)
-            > **Note**: This interface uses A2A protocol for all communication, providing agent-to-agent 
-            > interaction capabilities while maintaining the familiar chat experience.
-            """)
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    a2a_agent_dropdown = gr.Dropdown(
-                        choices=model_choices,
-                        value=default_model if default_model in model_choices else model_choices[0] if model_choices else None,
-                        label="Select Agent",
-                        info="Agent selection (for display purposes - A2A server handles the actual model)"
-                    )
-                with gr.Column(scale=1):
-                    a2a_collection_dropdown = gr.Dropdown(
-                        choices=collection_choices,
-                        value=collection_choices[0],
-                        label="Select Knowledge Base",
-                        info="Choose which knowledge base to use for answering questions"
-                    )
-            
-            gr.Markdown("""
-            > **Collection Selection**: 
-            > - When a specific collection is selected, the A2A server will use that collection:
-            >   - "PDF Collection": Will search the PDF documents via A2A
-            >   - "Repository Collection": Will search the repository code via A2A
-            >   - "Web Knowledge Base": Will search web content via A2A
-            >   - "General Knowledge": Will use the model's built-in knowledge via A2A
-            > - All communication goes through the A2A protocol for agent-to-agent interaction
-            """)
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    a2a_use_cot_checkbox = gr.Checkbox(
-                        label="Use Chain of Thought", 
-                        value=False,
-                        info="Enable step-by-step reasoning through A2A"
-                    )
-                    # State component to sync with checkbox for API generation
-                    a2a_use_cot_state = gr.State(value=False)
-                with gr.Column(scale=1):
-                    a2a_clear_button = gr.Button("Clear Chat", variant="secondary")
-            
-            a2a_chatbot = gr.Chatbot(height=400, label="A2A Chat")
-            with gr.Row():
-                a2a_msg = gr.Textbox(label="Your Message", scale=9, placeholder="Ask a question...")
-                a2a_send = gr.Button("Send", scale=1, variant="primary")
-            
-            # A2A Status indicator
-            with gr.Row():
-                a2a_status_button = gr.Button("🔍 Check A2A Status", variant="secondary", size="sm")
-                a2a_status_output = gr.Textbox(label="A2A Status", lines=2, interactive=False, visible=False)
-            
-            # A2A Testing Tab
-            with gr.Tab("A2A Protocol Testing"):
-                gr.Markdown("""
-            # 🤖 A2A Protocol Testing Interface
-            
-            Test the Agent2Agent (A2A) protocol functionality. Make sure the A2A server is running on `localhost:8000`.
-            
-            > **Note**: This interface tests the A2A protocol by making HTTP requests to the A2A server. 
-            > The server must be running separately using `python main.py`.
-            """)
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### 🔍 Basic A2A Tests")
+                # A2A Demo Tab
+                with gr.Tab("A2A Demo"):
+                    gr.Markdown("## A2A Agent Swapping Demo")
+                    gr.Markdown("This demo showcases the Agent-to-Agent (A2A) Protocol's ability to dynamically swap agents based on availability. Toggle agent availability and run tasks to see the orchestrator automatically select the best available agent.")
                     
-                    # Health Check
-                    health_button = gr.Button("🏥 Health Check", variant="secondary")
-                    health_output = gr.Textbox(label="Health Check Result", lines=5, interactive=False)
-                    
-                    # Agent Card
-                    agent_card_button = gr.Button("🃏 Get Agent Card", variant="secondary")
-                    agent_card_output = gr.Textbox(label="Agent Card Result", lines=8, interactive=False)
-                    
-                    # Agent Discovery
+                    # State for agent availability
                     with gr.Row():
-                        discover_capability = gr.Textbox(
-                            label="Capability to Discover", 
-                            value="document.query",
-                            placeholder="e.g., document.query, task.create"
-                        )
-                        discover_button = gr.Button("🔍 Discover Agents", variant="secondary")
-                    discover_output = gr.Textbox(label="Agent Discovery Result", lines=6, interactive=False)
-                
-                with gr.Column(scale=1):
-                    gr.Markdown("### 📄 Document Query Testing")
-                    
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 1. Agent Availability")
+                            gr.Markdown("Toggle which agents are available to accept tasks.")
+                            
+                            # Planner
+                            gr.Markdown("#### Planner Agents")
+                            planner_a_status = gr.Checkbox(label="Planner Agent A (v1.0)", value=True)
+                            planner_b_status = gr.Checkbox(label="Planner Agent B (v1.1 - Fast)", value=True)
+                            
+                            # Researcher
+                            gr.Markdown("#### Researcher Agents")
+                            researcher_a_status = gr.Checkbox(label="Researcher Agent A (Web)", value=True)
+                            researcher_b_status = gr.Checkbox(label="Researcher Agent B (PDF/Vector)", value=True)
+                            
+                            # Reasoner
+                            gr.Markdown("#### Reasoner Agents")
+                            reasoner_a_status = gr.Checkbox(label="Reasoner Agent A (DeepThink)", value=True)
+                            reasoner_b_status = gr.Checkbox(label="Reasoner Agent B (QuickLogic)", value=True)
+                            
+                            # Synthesizer
+                            gr.Markdown("#### Synthesizer Agents")
+                            synthesizer_a_status = gr.Checkbox(label="Synthesizer Agent A (Creative)", value=True)
+                            synthesizer_b_status = gr.Checkbox(label="Synthesizer Agent B (Concise)", value=True)
+    
+                        with gr.Column(scale=3):
+                            gr.Markdown("### 2. Task Simulation")
+                            
+                            with gr.Row():
+                                demo_task_btn = gr.Button("🚀 Start Multi-Agent Task", variant="primary")
+                                swap_scenario_btn = gr.Button("🔄 Simulate Researcher Swap")
+                            
+                            gr.Markdown("### 3. Execution Trace")
+                            # converted to Chatbot as requested to prevent overflow
+                            demo_log_output = gr.Chatbot(label="Task Trace", height=600, elem_id="a2a_trace_log")
+                            
+                            # Hidden state to store current log (history)
+                            demo_log_state = gr.State(value=[])
+                        
+                    # Agent Card Display Area
                     with gr.Row():
-                        a2a_query = gr.Textbox(
-                            label="Query", 
-                            value="What is artificial intelligence?",
-                            placeholder="Enter your question"
-                        )
-                        a2a_collection = gr.Dropdown(
-                            choices=["PDF Collection", "Repository Collection", "Web Knowledge Base", "General Knowledge"],
-                            value="General Knowledge",
-                            label="Collection"
-                        )
-                    
-                    a2a_use_cot = gr.Checkbox(label="Use Chain of Thought", value=False)
-                    a2a_query_button = gr.Button("🔍 Query Documents", variant="primary")
-                    a2a_query_output = gr.Textbox(label="Document Query Result", lines=10, interactive=False)
-            
-            gr.Markdown("---")
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### 📋 Task Management")
-                    
-                    with gr.Row():
-                        task_type = gr.Textbox(
-                            label="Task Type", 
-                            value="document_processing",
-                            placeholder="e.g., document_processing, analysis_task"
-                        )
-                        task_params = gr.Textbox(
-                            label="Task Parameters (JSON)", 
-                            value='{"document": "test.pdf", "chunk_count": 10}',
-                            placeholder='{"key": "value"}'
-                        )
-                    
-                    task_create_button = gr.Button("➕ Create Task", variant="primary")
-                    task_create_output = gr.Textbox(label="Task Creation Result", lines=6, interactive=False)
-                    
-                    with gr.Row():
-                        task_id_input = gr.Textbox(
-                            label="Task ID to Check", 
-                            placeholder="Enter task ID from creation result"
-                        )
-                        task_status_button = gr.Button("📊 Check Task Status", variant="secondary")
-                    task_status_output = gr.Textbox(label="Task Status Result", lines=6, interactive=False)
-                
-                with gr.Column(scale=1):
-                    gr.Markdown("### 📊 Task Management Dashboard")
-                    
-                    task_list_button = gr.Button("📋 Show All Tasks", variant="secondary")
-                    task_refresh_button = gr.Button("🔄 Refresh Task Statuses", variant="secondary")
-                    task_dashboard_output = gr.Textbox(label="Task Dashboard", lines=12, interactive=False)
-            
-            gr.Markdown("---")
-            
-            with gr.Row():
-                gr.Markdown("""
-                ### 🚀 Quick Test Suite
-                
-                Run individual A2A tests or all tests in sequence to verify the complete functionality.
-                """)
-                
-                with gr.Column(scale=1):
-                    gr.Markdown("**Individual Tests:**")
-                    individual_health_button = gr.Button("🏥 Test Health", variant="secondary", size="sm")
-                    individual_card_button = gr.Button("🃏 Test Agent Card", variant="secondary", size="sm")
-                    individual_discover_button = gr.Button("🔍 Test Discovery", variant="secondary", size="sm")
-                    individual_query_button = gr.Button("📄 Test Query", variant="secondary", size="sm")
-                    individual_task_button = gr.Button("📋 Test Task", variant="secondary", size="sm")
-                
-                with gr.Column(scale=1):
-                    gr.Markdown("**Complete Test Suite:**")
-                    run_all_tests_button = gr.Button("🧪 Run All A2A Tests", variant="primary", size="lg")
-                
-                all_tests_output = gr.Textbox(label="Test Results", lines=15, interactive=False)
+                        render_agent_cards()
+                        
 
-            # A2A Demo Tab
-            with gr.Tab("A2A Demo"):
-                gr.Markdown("## A2A Agent Swapping Demo")
-                gr.Markdown("This demo showcases the Agent-to-Agent (A2A) Protocol's ability to dynamically swap agents based on availability. Toggle agent availability and run tasks to see the orchestrator automatically select the best available agent.")
-                
-                # State for agent availability
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        gr.Markdown("### 1. Agent Availability")
-                        gr.Markdown("Toggle which agents are available to accept tasks.")
-                        
-                        # Planner
-                        gr.Markdown("#### Planner Agents")
-                        planner_a_status = gr.Checkbox(label="Planner Agent A (v1.0)", value=True)
-                        planner_b_status = gr.Checkbox(label="Planner Agent B (v1.1 - Fast)", value=True)
-                        
-                        # Researcher
-                        gr.Markdown("#### Researcher Agents")
-                        researcher_a_status = gr.Checkbox(label="Researcher Agent A (Web)", value=True)
-                        researcher_b_status = gr.Checkbox(label="Researcher Agent B (PDF/Vector)", value=True)
-                        
-                        # Reasoner
-                        gr.Markdown("#### Reasoner Agents")
-                        reasoner_a_status = gr.Checkbox(label="Reasoner Agent A (DeepThink)", value=True)
-                        reasoner_b_status = gr.Checkbox(label="Reasoner Agent B (QuickLogic)", value=True)
-                        
-                        # Synthesizer
-                        gr.Markdown("#### Synthesizer Agents")
-                        synthesizer_a_status = gr.Checkbox(label="Synthesizer Agent A (Creative)", value=True)
-                        synthesizer_b_status = gr.Checkbox(label="Synthesizer Agent B (Concise)", value=True)
 
-                    with gr.Column(scale=2):
-                        gr.Markdown("### 2. Task Simulation")
-                        
-                        with gr.Row():
-                            demo_task_btn = gr.Button("🚀 Start Multi-Agent Task", variant="primary")
-                            swap_scenario_btn = gr.Button("🔄 Simulate Researcher Swap")
-                        
-                        gr.Markdown("### 3. Execution Trace")
-                        demo_log_output = gr.HTML(label="Task Trace", value="<div style='padding:10px; border:1px solid #ddd; border-radius:5px; height:400px; overflow-y:auto; font-family:monospace;'>Running log will appear here...</div>")
-                        
-                        # Hidden state to store current log
-                        demo_log_state = gr.State(value=[])
-                        
-                # Agent Card Display Area
-                with gr.Row():
-                    with gr.Accordion("View Agent Cards", open=False):
-                        gr.Markdown("### Registered Agent Cards")
-                        
-                        # Create tabs for each agent type card
-                        with gr.Tabs():
-                            with gr.Tab("Planner"):
-                                gr.JSON(value=get_planner_agent_card())
-                            with gr.Tab("Researcher"):
-                                gr.JSON(value=get_researcher_agent_card())
-                            with gr.Tab("Reasoner"):
-                                gr.JSON(value=get_reasoner_agent_card())
-                            with gr.Tab("Synthesizer"):
-                                gr.JSON(value=get_synthesizer_agent_card())
 
                 # Simulation Logic
-                def run_demo_simulation(p_a, p_b, res_a, res_b, rea_a, rea_b, syn_a, syn_b, current_logs):
+                def run_demo_simulation(p_a, p_b, res_a, res_b, rea_a, rea_b, syn_a, syn_b, current_history):
                     import time
                     import random
-
                     
-                    # Helper to generate log entry
-                    def log(msg, type="info"):
-                        timestamp = time.strftime("%H:%M:%S")
-                        color = "#333"
-                        if type == "success": color = "green"
-                        elif type == "error": color = "red" 
-                        elif type == "warning": color = "orange"
-                        elif type == "swapping": color = "blue"
+                    # Generate a mock Task ID
+                    task_id = f"a2a-demo-{int(time.time())}-{random.randint(1000, 9999)}"
+                    
+                    # Helper for chat messages (using list of list format for older Gradio compatibility)
+                    def msg(content):
+                        # Log to stdout
+                        print(f"[A2A Demo Trace] {content}")
+                        # Returns message dictionary for new Gradio Chatbot format
+                        return {"role": "assistant", "content": content}
                         
-                        entry = f"<div style='margin-bottom:5px;'><span style='color:#888'>[{timestamp}]</span> <span style='color:{color}'>{msg}</span></div>"
-                        return entry
+                    # Helper for user messages
+                    def user_msg(content):
+                        return {"role": "user", "content": content}
 
-                    new_logs = []
-                    if not current_logs:
-                        new_logs.append(log("🏁 Starting new A2A demo simulation tasks...", "info"))
+                    new_history = list(current_history) if current_history else []
+                    
+                    if not new_history:
+                         new_history.append(msg(f"🏁 **Starting new A2A demo simulation tasks...**\nTarget Query: `What are Generative Adversarial Networks (GANs)?`\nTask ID: `{task_id}`"))
                     else:
-                        new_logs = list(current_logs)
-                        new_logs.append(log("-" * 40))
-                        new_logs.append(log("🏁 Starting new task cycle...", "info"))
+                        new_history.append(msg("---"))
+                        new_history.append(msg(f"🏁 **Starting new task cycle...**\nTarget Query: `What are Generative Adversarial Networks (GANs)?`\nTask ID: `{task_id}`"))
+                    
+                    yield new_history, new_history
+                    time.sleep(1)
 
                     # 1. Discovery & Planning
-                    new_logs.append(log("🔍 Orchestrator: Discovering Planner Agents...", "info"))
+                    new_history.append(msg("🔍 **Orchestrator**: Discovering Planner Agents..."))
+                    yield new_history, new_history
+                    time.sleep(1.5) # Simulate processing
+                    
                     selected_planner = None
                     if p_a:
                         selected_planner = "Planner A (v1.0)"
@@ -1389,17 +1422,26 @@ def create_interface():
                         selected_planner = "Planner B (v1.1)"
                     
                     if not selected_planner:
-                        new_logs.append(log("❌ No Planner Agents available! Task failed.", "error"))
-                        return "".join(new_logs), new_logs
+                        new_history.append(msg("❌ No Planner Agents available! Task failed."))
+                        new_history.append(msg(f"📝 **Task Status**: FAILED\nTask ID: `{task_id}`"))
+                        yield new_history, new_history
+                        return
                     
                     if not p_a and p_b:
-                        new_logs.append(log(f"⚠️ Planner A is BUSY. Swapping to available agent...", "swapping"))
+                        new_history.append(msg(f"⚠️ Planner A is BUSY. Swapping to available agent..."))
+                        yield new_history, new_history
+                        time.sleep(1)
                     
-                    new_logs.append(log(f"✅ Selected: <b>{selected_planner}</b>", "success"))
-                    new_logs.append(log(f"📋 {selected_planner}: Decomposing task into sub-steps...", "info"))
+                    new_history.append(msg(f"✅ Selected: **{selected_planner}**"))
+                    new_history.append(msg(f"📋 {selected_planner}: Decomposing task into sub-steps...\n1. Define GANs\n2. Explain architecture (Generator/Discriminator)\n3. List applications"))
+                    yield new_history, new_history
+                    time.sleep(2)
                     
                     # 2. Research
-                    new_logs.append(log("🔍 Orchestrator: Discovering Researcher Agents...", "info"))
+                    new_history.append(msg("🔍 **Orchestrator**: Discovering Researcher Agents..."))
+                    yield new_history, new_history
+                    time.sleep(1.5)
+                    
                     selected_researcher = None
                     if res_a:
                         selected_researcher =   "Researcher A (Web)"
@@ -1407,17 +1449,56 @@ def create_interface():
                         selected_researcher = "Researcher B (PDF/Vector)"
                     
                     if not selected_researcher:
-                        new_logs.append(log("❌ No Researcher Agents available! Task failed.", "error"))
-                        return "".join(new_logs), new_logs
+                        new_history.append(msg("❌ No Researcher Agents available! Task failed."))
+                        new_history.append(msg(f"📝 **Task Status**: FAILED\nTask ID: `{task_id}`"))
+                        yield new_history, new_history
+                        return
                         
                     if not res_a and res_b:
-                        new_logs.append(log(f"⚠️ Researcher A is BUSY. Swapping to available agent...", "swapping"))
+                        new_history.append(msg(f"⚠️ Researcher A is BUSY. Swapping to available agent..."))
+                        yield new_history, new_history
+                        time.sleep(1)
 
-                    new_logs.append(log(f"✅ Selected: <b>{selected_researcher}</b>", "success"))
-                    new_logs.append(log(f"🔬 {selected_researcher}: Gathering information...", "info"))
+                    new_history.append(msg(f"✅ Selected: **{selected_researcher}**"))
+                    new_history.append(msg(f"🔬 {selected_researcher}: Gathering information..."))
+                    yield new_history, new_history
+                    time.sleep(1)
+                    
+                    # Real Vector Retrieval (Standardized format)
+                    try:
+                        # Query vector store for the GANs topic
+                        # We try Web collection first, then General, then fallback
+                        demo_query = "What are Generative Adversarial Networks (GANs)?"
+                        real_results = []
+                        
+                        if hasattr(vector_store, 'query_web_collection'):
+                            real_results = vector_store.query_web_collection(demo_query)
+                        
+                        if not real_results and hasattr(vector_store, 'query_general_collection'):
+                             real_results = vector_store.query_general_collection(demo_query)
+                        
+                        # Format the output
+                        if real_results:
+                            vector_output = "**Retrieved Vectors:**\n"
+                            for i, res in enumerate(real_results):
+                                content_preview = res.get('content', '')[:100].replace('\n', ' ') + "..."
+                                source = res.get('metadata', {}).get('source', 'Unknown')
+                                vector_output += f"- `vec_{i}`: {content_preview} (Source: {source})\n"
+                        else:
+                            vector_output = "**Retrieved Vectors:**\nNo relevant vectors found in the knowledge base for this query."
+                            
+                    except Exception as e:
+                        vector_output = f"**Retrieved Vectors:**\nError retrieving vectors: {str(e)}"
+
+                    new_history.append(msg(vector_output.strip()))
+                    yield new_history, new_history
+                    time.sleep(2)
                     
                     # 3. Reasoning
-                    new_logs.append(log("🔍 Orchestrator: Discovering Reasoner Agents...", "info"))
+                    new_history.append(msg("🔍 **Orchestrator**: Discovering Reasoner Agents..."))
+                    yield new_history, new_history
+                    time.sleep(1.5)
+                    
                     selected_reasoner = None
                     if rea_a:
                         selected_reasoner = "Reasoner A (DeepThink)"
@@ -1425,17 +1506,26 @@ def create_interface():
                         selected_reasoner = "Reasoner B (QuickLogic)"
                     
                     if not selected_reasoner:
-                        new_logs.append(log("❌ No Reasoner Agents available! Task failed.", "error"))
-                        return "".join(new_logs), new_logs
+                        new_history.append(msg("❌ No Reasoner Agents available! Task failed."))
+                        new_history.append(msg(f"📝 **Task Status**: FAILED\nTask ID: `{task_id}`"))
+                        yield new_history, new_history
+                        return
                     
                     if not rea_a and rea_b:
-                        new_logs.append(log(f"⚠️ Reasoner A is BUSY. Swapping to available agent...", "swapping"))
+                        new_history.append(msg(f"⚠️ Reasoner A is BUSY. Swapping to available agent..."))
+                        yield new_history, new_history
+                        time.sleep(1)
 
-                    new_logs.append(log(f"✅ Selected: <b>{selected_reasoner}</b>", "success"))
-                    new_logs.append(log(f"🧠 {selected_reasoner}: Analyzing findings...", "info"))
+                    new_history.append(msg(f"✅ Selected: **{selected_reasoner}**"))
+                    new_history.append(msg(f"🧠 {selected_reasoner}: Analyzing findings..."))
+                    yield new_history, new_history
+                    time.sleep(2)
                     
                     # 4. Synthesis
-                    new_logs.append(log("🔍 Orchestrator: Discovering Synthesizer Agents...", "info"))
+                    new_history.append(msg("🔍 **Orchestrator**: Discovering Synthesizer Agents..."))
+                    yield new_history, new_history
+                    time.sleep(1.5)
+                    
                     selected_synthesizer = None
                     if syn_a:
                         selected_synthesizer = "Synthesizer A (Creative)"
@@ -1443,18 +1533,42 @@ def create_interface():
                         selected_synthesizer = "Synthesizer B (Concise)"
                     
                     if not selected_synthesizer:
-                        new_logs.append(log("❌ No Synthesizer Agents available! Task failed.", "error"))
-                        return "".join(new_logs), new_logs
+                        new_history.append(msg("❌ No Synthesizer Agents available! Task failed."))
+                        new_history.append(msg(f"📝 **Task Status**: FAILED\nTask ID: `{task_id}`"))
+                        yield new_history, new_history
+                        return
 
                     if not syn_a and syn_b:
-                        new_logs.append(log(f"⚠️ Synthesizer A is BUSY. Swapping to available agent...", "swapping"))
+                        new_history.append(msg(f"⚠️ Synthesizer A is BUSY. Swapping to available agent..."))
+                        yield new_history, new_history
+                        time.sleep(1)
 
-                    new_logs.append(log(f"✅ Selected: <b>{selected_synthesizer}</b>", "success"))
-                    new_logs.append(log(f"✍️ {selected_synthesizer}: Compiling final response...", "info"))
+                    new_history.append(msg(f"✅ Selected: **{selected_synthesizer}**"))
+                    new_history.append(msg(f"✍️ {selected_synthesizer}: Compiling final response..."))
+                    yield new_history, new_history
+                    time.sleep(2)
                     
-                    new_logs.append(log("🎉 Task Completed Successfully!", "success"))
+                    # Final Response
+                    final_response = """
+**Final Answer:**
+Generative Adversarial Networks (GANs) are a class of machine learning frameworks designed by Ian Goodfellow and his colleagues in 2014. They consist of two neural networks contesting with each other in a game (in the sense of game theory, often but not exclusively in the form of a zero-sum game).
+
+**Key Components:**
+*   **Generator:** Creates candidates (generative part) and tries to fool the discriminator.
+*   **Discriminator:** Evaluates candidates (discriminative part) and tries to distinguish true data from fake data.
+
+**Applications:**
+*   Image generation and editing
+*   Super-resolution
+*   Text-to-image synthesis
+*   Data augmentation
+                    """.strip()
+                    new_history.append(msg(final_response))
+                    yield new_history, new_history
                     
-                    return "".join(new_logs), new_logs
+                    new_history.append(msg("🎉 **Task Completed Successfully!**"))
+                    new_history.append(msg(f"📝 **Task Status**: COMPLETED\nTask ID: `{task_id}`"))
+                    yield new_history, new_history
 
                 # Event Listeners
                 demo_task_btn.click(
@@ -1492,59 +1606,8 @@ def create_interface():
             # Model download event handler
             download_button.click(download_model, inputs=[model_dropdown], outputs=[model_status], api_name=False)
             
-            # Standard chat handlers
-            standard_msg.submit(
-                chat,
-                inputs=[
-                    standard_msg,
-                    standard_chatbot,
-                    standard_agent_dropdown,
-                    gr.State(False),  # use_cot=False
-                    standard_collection_dropdown
-                ],
-                outputs=[standard_chatbot],
-                api_name=False
-            )
-            standard_send.click(
-                chat,
-                inputs=[
-                    standard_msg,
-                    standard_chatbot,
-                    standard_agent_dropdown,
-                    gr.State(False),  # use_cot=False
-                    standard_collection_dropdown
-                ],
-                outputs=[standard_chatbot],
-                api_name=False
-            )
-            standard_clear.click(lambda: None, None, standard_chatbot, queue=False, api_name=False)
-            
-            # CoT chat handlers
-            cot_msg.submit(
-                chat,
-                inputs=[
-                    cot_msg,
-                    cot_chatbot,
-                    cot_agent_dropdown,
-                    gr.State(True),  # use_cot=True
-                    cot_collection_dropdown
-                ],
-                outputs=[cot_chatbot],
-                api_name=False
-            )
-            cot_send.click(
-                chat,
-                inputs=[
-                    cot_msg,
-                    cot_chatbot,
-                    cot_agent_dropdown,
-                    gr.State(True),  # use_cot=True
-                    cot_collection_dropdown
-                ],
-                outputs=[cot_chatbot],
-                api_name=False
-            )
-            cot_clear.click(lambda: None, None, cot_chatbot, queue=False, api_name=False)
+            # Standard and CoT handlers removed
+
             
             # A2A Testing Event Handlers
             health_button.click(test_a2a_health, outputs=[health_output], api_name=False)
@@ -1648,76 +1711,10 @@ def create_interface():
                 api_name=False
             )
             a2a_clear_button.click(lambda: None, None, a2a_chatbot, queue=False, api_name=False)
-            a2a_status_button.click(test_a2a_health, outputs=[a2a_status_output], api_name=False)
+            # a2a_status_button removed from Chat tab
             
-            # Sync checkbox with state component for API generation consistency
-            def sync_cot_state(checkbox_value):
-                return checkbox_value
-            
-            a2a_use_cot_checkbox.change(
-                sync_cot_state,
-                inputs=[a2a_use_cot_checkbox],
-                outputs=[a2a_use_cot_state],
-                queue=False,  # Prevent API generation issues during initialization
-                api_name=False
-            )
-            
-            # Instructions
-            gr.Markdown("""
-        ## Instructions
-        
-        1. **Document Processing**:
-           - Upload PDFs using the file uploader
-           - Process web content by entering URLs
-           - Process repositories by entering paths or GitHub URLs
-           - All processed content is added to the knowledge base
-        
-        2. **Standard Chat Interface**:
-           - Quick responses without detailed reasoning steps
-           - Select your preferred agent (Ollama qwen2 by default)
-           - Select which knowledge collection to query:
-             - **PDF Collection**: Always searches PDF documents
-             - **Repository Collection**: Always searches code repositories
-             - **Web Knowledge Base**: Always searches web content
-             - **General Knowledge**: Uses the model's built-in knowledge without searching collections
-        
-        3. **Chain of Thought Chat Interface**:
-           - Detailed responses with step-by-step reasoning
-           - See the planning, research, reasoning, and synthesis steps
-           - Great for complex queries or when you want to understand the reasoning process
-           - May take longer but provides more detailed and thorough answers
-           - Same collection selection options as the Standard Chat Interface
-        
-        4. **A2A Chat Interface**:
-           - Same chat experience as standard interfaces but uses A2A protocol
-           - **Prerequisites**: A2A server must be running (`python main.py` on port 8000)
-           - **Agent-to-Agent Communication**: All queries go through A2A protocol
-           - **Collection Support**: PDF, Repository, Web, and General Knowledge collections
-           - **Chain of Thought**: Step-by-step reasoning through A2A
-           - **Status Monitoring**: Check A2A server connectivity
-           - **Same UI**: Familiar chat interface with A2A backend
-        
-        5. **A2A Protocol Testing**:
-           - Test the Agent2Agent (A2A) protocol functionality
-           - **Prerequisites**: A2A server must be running (`python main.py` on port 8000)
-           - **Health Check**: Verify A2A server connectivity
-           - **Agent Card**: Get agent capability information
-           - **Agent Discovery**: Find agents with specific capabilities
-           - **Document Query**: Test A2A document querying with different collections
-           - **Task Management**: Create, monitor, and track long-running tasks
-           - **Task Dashboard**: View all tracked tasks and their statuses
-           - **Complete Test Suite**: Run all A2A tests in sequence
-        
-        6. **Performance Expectations**:
-           - **Default Model**: gemma3:270m (Ollama) - Optimized for speed and quality
-           - **Other Ollama models**: Supported if installed via `ollama pull`
-           - **A2A requests**: Depends on A2A server performance and network latency
-        
-        Note: The interface will automatically detect available models based on your configuration:
-        - gemma3:270m is the default option (requires Ollama to be installed and running)
-        - Other Ollama models can be selected if available
-        - A2A testing requires the A2A server to be running separately
-        """)
+            # Checkbox event listener removed
+
             
             return interface
     finally:

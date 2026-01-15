@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -106,7 +106,7 @@ class QueryResponse(BaseModel):
     context: List[dict]
 
 @app.post("/upload/pdf")
-async def upload_pdf(file: UploadFile = File(...), request: Request = None):
+async def upload_pdf(file: UploadFile = File(...)):
     """Upload and process a PDF file"""
     start_time = time.time()
     
