@@ -180,9 +180,10 @@ def menu_test_oradb():
     console.print("1. Run basic connection tests")
     console.print("2. Show collection statistics only")
     console.print("3. Run text similarity search")
+    console.print("4. Verify ONNX Model")
     console.print("0. Back to Main Menu")
     
-    choice = Prompt.ask("Select option", choices=["1", "2", "3", "0"], default="0")
+    choice = Prompt.ask("Select option", choices=["1", "2", "3", "4", "0"], default="0")
     
     if choice == "0":
         return
@@ -197,6 +198,9 @@ def menu_test_oradb():
     elif choice == "3":
         query = Prompt.ask("Enter test query", default="artificial intelligence")
         run_command(["python", "tests/test_oradb.py", "--query", query], "Running Vector Search...")
+
+    elif choice == "4":
+        run_command(["python", "tests/test_oradb.py", "--model-check"], "Verifying ONNX Model...")
         
     input("\nPress Enter to continue...")
 

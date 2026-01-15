@@ -180,6 +180,7 @@ def main():
     parser = argparse.ArgumentParser(description="Test Oracle DB Vector Store")
     parser.add_argument("--query", default="machine learning", help="Query to use for testing")
     parser.add_argument("--stats-only", action="store_true", help="Only show collection statistics without inserting test data")
+    parser.add_argument("--model-check", action="store_true", help="Only verify ONNX embedding model")
     
     args = parser.parse_args()
     
@@ -220,6 +221,10 @@ ORACLE_DB_DSN: your_connection_string_here
     # Check ONNX model
     check_onnx_model(store)
     
+    if args.model_check:
+        print("\n=== Model Verification Completed ===")
+        return
+
     # Check collection statistics
     check_collection_stats(store)
     
