@@ -8,6 +8,46 @@ import oracledb
 from langchain_core.documents import Document
 from langchain_oracledb import OracleVS, OracleEmbeddings
 
+# --- MONKEYPATCH BEGIN ---
+# Fix for AttributeError: 'str' object has no attribute 'pop'
+# The underlying library expects metadata to be a dict, but if stored as VARCHAR2/JSON in Oracle,
+# it might come back as a string string via oracledb.
+try:
+    import langchain_oracledb.vectorstores.oraclevs as vs_module
+    import json
+
+    original_read_similarity_output = vs_module._read_similarity_output
+
+    def _fixed_read_similarity_output(results: List, has_similarity_score: bool = False, has_embeddings: bool = False) -> List:
+        # Pre-process results to parse metadata string to dict if needed
+        fixed_results = []
+        for row in results:
+            # Row structure: text, metadata, *extras
+            if len(row) >= 2:
+                row_list = list(row)
+                metadata = row_list[1]
+                if isinstance(metadata, str):
+                    try:
+                        # Try to parse JSON string
+                        metadata_dict = json.loads(metadata)
+                        row_list[1] = metadata_dict
+                    except Exception as e:
+                        print(f"[OraDB Fix] Failed to parse metadata JSON: {e}")
+                        # Fallback to empty dict or keep as is (though it will likely fail downstream)
+                        pass
+                fixed_results.append(tuple(row_list))
+            else:
+                fixed_results.append(row)
+        
+        return original_read_similarity_output(fixed_results, has_similarity_score, has_embeddings)
+
+    # Apply patch
+    vs_module._read_similarity_output = _fixed_read_similarity_output
+    print("[OraDBVectorStore] Applied monkeypatch for metadata JSON parsing.")
+except Exception as e:
+    print(f"[OraDBVectorStore] Failed to apply monkeypatch: {e}")
+# --- MONKEYPATCH END ---
+
 class OraDBVectorStore:
     def __init__(self, persist_directory: str = "embeddings", embedding_function: Optional[Any] = None):
         """Initialize Oracle DB Vector Store using langchain-oracledb
