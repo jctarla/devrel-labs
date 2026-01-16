@@ -1179,7 +1179,7 @@ def create_interface():
                     Chat with your documents using the A2A (Agent2Agent) protocol. This interface provides agent-to-agent 
                     interaction capabilities while maintaining a familiar chat experience.
                     
-                    > **Prerequisites**: A2A server must be running (`python main.py` on port 8000)
+
                     """)
                     
                     with gr.Row():

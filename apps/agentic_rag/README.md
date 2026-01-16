@@ -507,7 +507,7 @@ python -m src.local_rag_agent --query "How to implement a queue?" --collection "
 - Same chat experience as standard interfaces but uses A2A protocol.
 - **Granular Execution Trace**: Displays step-by-step execution including Orchestrator logic, Agent Selection, and detailed intermediate steps.
 - **Real Vector Retrieval**: Shows actual retrieved content from the knowledge base during the Research phase, not just final answers.
-- **Prerequisites**: A2A server must be running (`python main.py` on port 8000).
+
 - **Agent-to-Agent Communication**: All queries go through A2A protocol.
 - **Collection Support**: PDF, Repository, Web, and General Knowledge collections.
 - **Chain of Thought**: Step-by-step reasoning through A2A.
@@ -516,7 +516,7 @@ python -m src.local_rag_agent --query "How to implement a queue?" --collection "
 
 ### 5. A2A Protocol Testing
 - Test the Agent2Agent (A2A) protocol functionality.
-- **Prerequisites**: A2A server must be running (`python main.py` on port 8000).
+
 - **Health Check**: Verify A2A server connectivity.
 - **Agent Card**: Get agent capability information.
 - **Agent Discovery**: Find agents with specific capabilities.
@@ -932,8 +932,7 @@ The Gradio interface includes an **A2A Chat Interface** tab that allows you to i
    - 📝 Synthesizer combines into final answer
 4. **View step-by-step progress** as each agent processes via A2A protocol
 
-**Prerequisites**: 
-- A2A server must be running (`python main.py` on port 8000)
+
 - Specialized agents are automatically registered on server startup
 - All communication happens via A2A protocol (HTTP + JSON-RPC 2.0)
 
