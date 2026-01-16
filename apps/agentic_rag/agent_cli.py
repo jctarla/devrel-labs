@@ -15,15 +15,12 @@ try:
     from rich.table import Table
     from rich.progress import Progress, SpinnerColumn, TextColumn
     from rich import print as rprint
+    import questionary
 except ImportError:
-    print("Error: 'rich' library is required. Please install it with: pip install rich")
+    print("Error: 'rich' and 'questionary' libraries are required. Please install them with: pip install rich questionary")
     sys.exit(1)
 
-# Initialize console
-console = Console()
-
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+# ... (Previous imports and init remain)
 
 def print_header():
     clear_screen()
@@ -33,59 +30,27 @@ def print_header():
     ║         Oracle AI Vector Search + Ollama (Gemma 3)             ║
     ╚════════════════════════════════════════════════════════════════╝
     """
-    console.print(Panel(Textwrap(title, justify="center"), style="bold cyan"))
+    console.print(Panel(Textwrap(title, justify="center"), style="bold cyan", subtitle="Control Plane"))
     console.print(f"[dim]Working Directory: {os.getcwd()}[/dim]\n")
-
-def Textwrap(text, justify="left"):
-    return text # Placeholder if needed, but rich Panel handles string content well
-
-def run_command(command: List[str], description: str = "Processing"):
-    """Run a command with a spinner and error handling"""
-    console.print(f"[bold green]Running command:[/bold green] {' '.join(command)}")
-    
-    try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=True,
-        ) as progress:
-            progress.add_task(description=description, total=None)
-            
-            # Run command
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True
-            )
-            
-        if result.returncode == 0:
-            console.print("[bold green]Success![/bold green]")
-            if result.stdout:
-                console.print(Panel(result.stdout, title="Output", border_style="green"))
-            return True
-        else:
-            console.print("[bold red]Error![/bold red]")
-            if result.stderr:
-                console.print(Panel(result.stderr, title="Error Details", border_style="red"))
-            if result.stdout:
-                console.print(Panel(result.stdout, title="Standard Output", border_style="dim"))
-            return False
-            
-    except Exception as e:
-        console.print(f"[bold red]Exception occurred:[/bold red] {str(e)}")
-        return False
 
 def menu_process_pdfs():
     print_header()
-    console.print("[bold yellow]PDF Processor[/bold yellow]")
-    console.print("1. Process a single PDF file")
-    console.print("2. Process all PDFs in a directory")
-    console.print("3. Process a PDF from URL")
-    console.print("0. Back to Main Menu")
     
-    choice = Prompt.ask("Select option", choices=["1", "2", "3", "0"], default="0")
+    choices = [
+        questionary.Choice("Process a single PDF file", value="1"),
+        questionary.Choice("Process all PDFs in a directory", value="2"),
+        questionary.Choice("Process a PDF from URL", value="3"),
+        questionary.Separator(),
+        questionary.Choice("Back to Main Menu", value="0")
+    ]
     
-    if choice == "0":
+    choice = questionary.select(
+        "PDF Processor",
+        choices=choices,
+        use_arrow_keys=True
+    ).ask()
+    
+    if not choice or choice == "0":
         return
         
     output_file = Prompt.ask("Output JSON file path", default="chunks.json")
@@ -114,14 +79,21 @@ def menu_process_pdfs():
 
 def menu_process_websites():
     print_header()
-    console.print("[bold yellow]Website Processor[/bold yellow]")
-    console.print("1. Process a single website URL")
-    console.print("2. Process multiple URLs from a file")
-    console.print("0. Back to Main Menu")
     
-    choice = Prompt.ask("Select option", choices=["1", "2", "0"], default="0")
+    choices = [
+        questionary.Choice("Process a single website URL", value="1"),
+        questionary.Choice("Process multiple URLs from a file", value="2"),
+        questionary.Separator(),
+        questionary.Choice("Back to Main Menu", value="0")
+    ]
     
-    if choice == "0":
+    choice = questionary.select(
+        "Website Processor",
+        choices=choices,
+        use_arrow_keys=True
+    ).ask()
+    
+    if not choice or choice == "0":
         return
         
     output_file = Prompt.ask("Output JSON file path", default="docs/web_content.json")
@@ -142,16 +114,23 @@ def menu_process_websites():
 
 def menu_manage_vector_store():
     print_header()
-    console.print("[bold yellow]Manage Vector Store[/bold yellow]")
-    console.print("1. Add PDF chunks to vector store")
-    console.print("2. Add Web chunks to vector store")
-    console.print("3. Query vector store directly")
-    console.print("4. Check Vector Store Statistics")
-    console.print("0. Back to Main Menu")
     
-    choice = Prompt.ask("Select option", choices=["1", "2", "3", "4", "0"], default="0")
+    choices = [
+        questionary.Choice("Add PDF chunks to vector store", value="1"),
+        questionary.Choice("Add Web chunks to vector store", value="2"),
+        questionary.Choice("Query vector store directly", value="3"),
+        questionary.Choice("Check Vector Store Statistics", value="4"),
+        questionary.Separator(),
+        questionary.Choice("Back to Main Menu", value="0")
+    ]
     
-    if choice == "0":
+    choice = questionary.select(
+        "Manage Vector Store",
+        choices=choices,
+        use_arrow_keys=True
+    ).ask()
+    
+    if not choice or choice == "0":
         return
         
     if choice == "1":
@@ -181,20 +160,26 @@ def menu_manage_vector_store():
 
 def menu_test_oradb():
     print_header()
-    console.print("[bold yellow]Test Oracle DB Connection[/bold yellow]")
-    console.print("1. Run basic connection tests")
-    console.print("2. Show collection statistics only")
-    console.print("3. Run text similarity search")
-    console.print("4. Verify ONNX Model")
-    console.print("0. Back to Main Menu")
     
-    choice = Prompt.ask("Select option", choices=["1", "2", "3", "4", "0"], default="0")
+    choices = [
+        questionary.Choice("Run basic connection tests", value="1"),
+        questionary.Choice("Show collection statistics only", value="2"),
+        questionary.Choice("Run text similarity search", value="3"),
+        questionary.Choice("Verify ONNX Model", value="4"),
+        questionary.Separator(),
+        questionary.Choice("Back to Main Menu", value="0")
+    ]
     
-    if choice == "0":
+    choice = questionary.select(
+        "Test Oracle DB Connection",
+        choices=choices,
+        use_arrow_keys=True
+    ).ask()
+    
+    if not choice or choice == "0":
         return
         
     if choice == "1":
-        # Note: test_oradb.py is in tests/ directory now
         run_command(["python", "tests/test_oradb.py"], "Testing Oracle DB...")
     
     elif choice == "2":
@@ -233,21 +218,27 @@ def menu_rag_agent():
 def main_menu():
     while True:
         print_header()
-        console.print("[bold]Select a Task:[/bold]")
         
-        table = Table(show_header=False, box=None)
-        table.add_row("[1]", "Process PDFs", style="cyan")
-        table.add_row("[2]", "Process Websites", style="cyan")
-        table.add_row("[3]", "Manage Vector Store", style="cyan")
-        table.add_row("[4]", "Test Oracle DB", style="cyan")
-        table.add_row("[5]", "Chat with Agent (RAG)", style="magenta")
-        table.add_row("[0]", "Exit", style="red")
+        choices = [
+            questionary.Choice("Process PDFs", value="1"),
+            questionary.Choice("Process Websites", value="2"),
+            questionary.Choice("Manage Vector Store", value="3"),
+            questionary.Choice("Test Oracle DB", value="4"),
+            questionary.Choice("Chat with Agent (RAG)", value="5"),
+            questionary.Separator(),
+            questionary.Choice("Exit", value="0")
+        ]
         
-        console.print(table)
+        choice = questionary.select(
+            "Select a Task:",
+            choices=choices,
+            use_arrow_keys=True
+        ).ask()
         
-        choice = Prompt.ask("\nEnter choice", choices=["1", "2", "3", "4", "5", "0"], default="5")
-        
-        if choice == "1":
+        if not choice or choice == "0":
+            console.print("[bold]Goodbye![/bold]")
+            sys.exit(0)
+        elif choice == "1":
             menu_process_pdfs()
         elif choice == "2":
             menu_process_websites()
@@ -257,9 +248,6 @@ def main_menu():
             menu_test_oradb()
         elif choice == "5":
             menu_rag_agent()
-        elif choice == "0":
-            console.print("[bold]Goodbye![/bold]")
-            sys.exit(0)
 
 if __name__ == "__main__":
     try:
