@@ -63,10 +63,10 @@ def check_collection_stats(store):
     print("\n=== Collection Statistics ===")
     
     collections = {
-        "PDF Collection": "pdf_documents",
-        "Repository Collection": "repository_documents",
-        "Web Knowledge Base": "web_documents",
-        "General Knowledge": "general_knowledge"
+        "PDF Collection": "PDFCOLLECTION",
+        "Repository Collection": "REPOCOLLECTION",
+        "Web Knowledge Base": "WEBCOLLECTION",
+        "General Knowledge": "GENERALCOLLECTION"
     }
     
     for name, collection in collections.items():
@@ -95,11 +95,11 @@ def check_collection_stats(store):
                 print(f"  Source: {source}")
                 
                 # Print other metadata based on collection type
-                if collection == "pdf_documents" and 'page' in metadata:
+                if collection == "PDFCOLLECTION" and 'page' in metadata:
                     print(f"  Page: {metadata['page']}")
-                elif collection == "repository_documents" and 'file_path' in metadata:
+                elif collection == "REPOCOLLECTION" and 'file_path' in metadata:
                     print(f"  File: {metadata['file_path']}")
-                elif collection == "web_documents" and 'title' in metadata:
+                elif collection == "WEBCOLLECTION" and 'title' in metadata:
                     print(f"  Title: {metadata['title']}")
             else:
                 print("No chunks found in this collection.")

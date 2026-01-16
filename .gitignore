@@ -50,3 +50,4 @@ agentic_rag/chunks.json
 agentic_rag/cot_chat_debug.json
 agentic_rag/embeddings/
 agentic_rag/config.yaml
+apps/agentic_rag/kubectl

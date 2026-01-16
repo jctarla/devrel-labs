@@ -120,7 +120,7 @@ def cleanup(store: OraDBVectorStore):
     """Remove test data"""
     logger.info("Cleaning up test data...")
     # Clean up all data from PDFCollection for a clean slate
-    store.delete_documents("pdf_documents", delete_all=True)
+    store.delete_documents("PDFCOLLECTION", delete_all=True)
     logger.info("Cleanup completed.")
 
 def main():

@@ -253,7 +253,61 @@ python -m src.store --add chunks.json
 python -m src.local_rag_agent --query "Can you explain the DaGAN Approach proposed in the Depth-Aware Generative Adversarial Network for Talking Head Video Generation article?"
 ```
 
-## 2. Chain of Thought (CoT) Support
+## 2. Deployment
+
+### Docker Deployment
+
+You can deploy the application using Docker. This ensures a consistent environment with all dependencies pre-installed.
+
+1. **Build the Docker image**:
+   ```bash
+   docker build -t agentic-rag .
+   ```
+
+2. **Run the container**:
+   ```bash
+   docker run -d \
+     --gpus all \
+     -p 7860:7860 \
+     -p 11434:11434 \
+     --name agentic-rag \
+     agentic-rag
+   ```
+
+   *Note: The `--gpus all` flag requires the NVIDIA Container Toolkit. If you don't have a GPU, the application will run in CPU-only mode (slower), and you can omit this flag.*
+
+3. **Access the application**:
+   - Gradio Interface: `http://localhost:7860`
+   - Ollama API: `http://localhost:11434`
+
+### Kubernetes Deployment
+
+For Kubernetes deployment, we provide a comprehensive set of manifests and scripts in the `k8s/` directory.
+
+1. **Prerequisites**:
+   - A Kubernetes cluster (local or cloud)
+   - `kubectl` configured
+   - NVIDIA GPU nodes (recommended for best performance)
+
+2. **Deploy using the helper script**:
+   ```bash
+   cd k8s
+   
+   # Deploy to default namespace
+   ./deploy.sh
+   
+   # Or deploy with a specific Hugging Face token (if needed)
+   ./deploy.sh --hf-token "your-token"
+   ```
+
+3. **Manual Deployment**:
+   ```bash
+   kubectl apply -f k8s/local-deployment/
+   ```
+
+For detailed Kubernetes instructions, including OKE (Oracle Kubernetes Engine) and Minikube, please refer to the [Kubernetes README](k8s/README.md).
+
+## 3. Chain of Thought (CoT) Support
 
 The system implements an advanced multi-agent Chain of Thought system, allowing complex queries to be broken down and processed through multiple specialized agents. This feature enhances the reasoning capabilities of both local and cloud-based models.
 

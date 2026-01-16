@@ -61,10 +61,10 @@ class OraDBVectorStore:
 
         # Initialize Tables (Collections)
         self.collections = {
-            "pdf_documents": "PDFCollection",
-            "web_documents": "WebCollection",
-            "repository_documents": "RepoCollection",
-            "general_knowledge": "GeneralCollection"
+            "PDFCOLLECTION": "PDFCOLLECTION",
+            "WEBCOLLECTION": "WEBCOLLECTION",
+            "REPOCOLLECTION": "REPOCOLLECTION",
+            "GENERALCOLLECTION": "GENERALCOLLECTION"
         }
         
         # Initialize OracleVS instances
@@ -128,23 +128,24 @@ class OraDBVectorStore:
         # OracleVS add_texts
         print(f"🔄 [OraDB] Inserting {len(chunks)} chunks into {collection_name}...")
         store.add_texts(texts=texts, metadatas=metadatas)
+        self.connection.commit()
         print(f"✅ [OraDB] Successfully inserted {len(chunks)} chunks.")
 
     def add_pdf_chunks(self, chunks: List[Dict[str, Any]], document_id: str):
         """Add chunks from a PDF document to the vector store"""
-        self._add_chunks_to_collection(chunks, "pdf_documents")
+        self._add_chunks_to_collection(chunks, "PDFCOLLECTION")
         
     def add_web_chunks(self, chunks: List[Dict[str, Any]], source_id: str):
         """Add chunks from web content to the vector store"""
-        self._add_chunks_to_collection(chunks, "web_documents")
+        self._add_chunks_to_collection(chunks, "WEBCOLLECTION")
         
     def add_general_knowledge(self, chunks: List[Dict[str, Any]], source_id: str):
         """Add general knowledge chunks to the vector store"""
-        self._add_chunks_to_collection(chunks, "general_knowledge")
+        self._add_chunks_to_collection(chunks, "GENERALCOLLECTION")
         
     def add_repo_chunks(self, chunks: List[Dict[str, Any]], document_id: str):
         """Add chunks from a repository to the vector store"""
-        self._add_chunks_to_collection(chunks, "repository_documents")
+        self._add_chunks_to_collection(chunks, "REPOCOLLECTION")
 
     def _query_collection(self, collection_name: str, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Helper to query a collection"""
@@ -168,15 +169,15 @@ class OraDBVectorStore:
 
     def query_pdf_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Query the PDF documents collection"""
-        return self._query_collection("pdf_documents", query, n_results)
+        return self._query_collection("PDFCOLLECTION", query, n_results)
 
     def query_web_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Query the web documents collection"""
-        return self._query_collection("web_documents", query, n_results)
+        return self._query_collection("WEBCOLLECTION", query, n_results)
 
     def query_general_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Query the general knowledge collection"""
-        return self._query_collection("general_knowledge", query, n_results)
+        return self._query_collection("GENERALCOLLECTION", query, n_results)
 
     def delete_documents(self, collection_name: str, ids: Optional[List[str]] = None, delete_all: bool = False):
         """Delete documents from a collection"""
@@ -199,11 +200,12 @@ class OraDBVectorStore:
                 print(f"🗑️ [OraDBVectorStore] Truncated collection {collection_name}")
         elif ids:
             store.delete(ids=ids)
+            self.connection.commit()
             print(f"🗑️ [OraDBVectorStore] Deleted {len(ids)} documents from {collection_name}")
 
     def query_repo_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Query the repository documents collection"""
-        return self._query_collection("repository_documents", query, n_results)
+        return self._query_collection("REPOCOLLECTION", query, n_results)
 
     def get_collection_count(self, collection_name: str) -> int:
         """Get the total number of chunks in a collection"""
@@ -255,6 +257,40 @@ class OraDBVectorStore:
         except Exception as e:
             print(f"Error getting chunk from {collection_name}: {e}")
             return {}
+
+    def get_embedding_dimension(self, collection_name: str) -> int:
+        """Get the dimension of embeddings in the collection"""
+        table_name = self.collections.get(collection_name)
+        if not table_name:
+            return 0
+        try:
+            cursor = self.connection.cursor()
+            # Try to fetch one embedding to check its dimension
+            # Assuming 'embedding' is the column name for the vector
+            cursor.execute(f"SELECT embedding FROM {table_name} FETCH FIRST 1 ROWS ONLY")
+            row = cursor.fetchone()
+            cursor.close()
+            
+            if row and row[0]:
+                # Oracle VECTOR type can be converted to list/string or accessed directly
+                # If it comes back as a string/object, we need to inspect it
+                embedding_data = row[0]
+                if hasattr(embedding_data, 'tolist'): # If it's a vector object
+                    return len(embedding_data.tolist())
+                elif isinstance(embedding_data, list):
+                    return len(embedding_data)
+                elif isinstance(embedding_data, str):
+                    # If it's a string representation
+                    return len(json.loads(embedding_data))
+                else:
+                    # Fallback check
+                    return len(list(embedding_data))
+            return 0
+        except Exception as e:
+            print(f"Error fetching dimension for {collection_name}: {e}")
+            return 0
+
+
 
     def check_embedding_model_exists(self, model_name: str = "ALL_MINILM_L12_V2") -> bool:
         """Check if an ONNX embedding model is loaded in the database"""

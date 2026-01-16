@@ -121,17 +121,64 @@ def load_onnx_model(conn):
     """)
     print(f"✅ Model '{MODEL_NAME}' loaded successfully!")
 
+def check_model_exists(conn):
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT model_name FROM user_mining_models WHERE model_name = :1", [MODEL_NAME])
+        result = cursor.fetchone()
+        return result is not None
+    except oracledb.DatabaseError as e:
+        print(f"⚠️ Error checking model existence: {e}")
+        return False
+
+def ensure_model_loaded(conn=None, force_reload=False):
+    """
+    Checks if the model exists in the DB. If not, downloads and loads it.
+    Returns True if model is ready, False otherwise.
+    """
+    should_close_conn = False
+    if conn is None:
+        try:
+            conn = get_db_connection()
+            should_close_conn = True
+        except Exception as e:
+            print(f"❌ Database connection failed: {e}")
+            return False
+
+    try:
+        if not force_reload:
+            print(f"🔍 Checking for existing model '{MODEL_NAME}' in Oracle DB...")
+            if check_model_exists(conn):
+                print(f"✅ Model '{MODEL_NAME}' already exists. Skipping download.")
+                return True
+            else:
+                print(f"⚠️ Model '{MODEL_NAME}' not found. Initiating automatic setup...")
+
+        onnx_content = download_and_extract_model()
+        upload_blob_to_db_file(conn, onnx_content)
+        load_onnx_model(conn)
+        return True
+    
+    except Exception as e:
+        print(f"❌ Error ensuring model loaded: {e}")
+        return False
+    finally:
+        if should_close_conn:
+            conn.close()
+
 def main():
     try:
         conn = get_db_connection()
         print("🔌 Connected to Oracle DB")
         
         # Check if model already exists?
-        # For this script, we force reload to ensure correctness as per user request
+        # By default, use ensure_model_loaded logic which checks first
+        success = ensure_model_loaded(conn, force_reload=True) # Keeping force=True for direct script execution as per likely intent of running THIS script directly
         
-        onnx_content = download_and_extract_model()
-        upload_blob_to_db_file(conn, onnx_content)
-        load_onnx_model(conn)
+        if success:
+             print("\n🎉 Success! Model is ready for use.")
+        else:
+             print("\n❌ Failed to load model.")
         
         conn.close()
         print("\n🎉 Success! Model is ready for use.")

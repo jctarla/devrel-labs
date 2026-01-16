@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import time
+from src.load_model import ensure_model_loaded
 from typing import Optional, List
 from threading import Thread
 import textwrap
@@ -145,9 +146,10 @@ def menu_manage_vector_store():
     console.print("1. Add PDF chunks to vector store")
     console.print("2. Add Web chunks to vector store")
     console.print("3. Query vector store directly")
+    console.print("4. Check Vector Store Statistics")
     console.print("0. Back to Main Menu")
     
-    choice = Prompt.ask("Select option", choices=["1", "2", "3", "0"], default="0")
+    choice = Prompt.ask("Select option", choices=["1", "2", "3", "4", "0"], default="0")
     
     if choice == "0":
         return
@@ -171,6 +173,9 @@ def menu_manage_vector_store():
     elif choice == "3":
         query = Prompt.ask("Enter search query")
         run_command(["python", "-m", "src.store", "--query", query], "Querying Vector Store...")
+
+    elif choice == "4":
+        run_command(["python", "-m", "src.db_stats"], "Fetching Statistics...")
     
     input("\nPress Enter to continue...")
 
@@ -258,6 +263,11 @@ def main_menu():
 
 if __name__ == "__main__":
     try:
+        console.print("[bold cyan]Checking AI Model availability...[/bold cyan]")
+        if not ensure_model_loaded():
+            console.print("[bold red]Failed to ensure AI model is loaded. Some features may not work.[/bold red]")
+            input("Press Enter to continue anyway...")
+        
         main_menu()
     except KeyboardInterrupt:
         console.print("\n[bold red]Interrupted by user. Exiting...[/bold red]")
