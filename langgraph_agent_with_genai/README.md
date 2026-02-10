@@ -7,7 +7,7 @@ In this article, I’ll share a real-life example of how I built a solution that
 
 >**Note**: This agent is intended for file search only. It does not have the ability to answer in-depth questions regarding the content of your files, as it can only access the summary of each document.  
 
-# File Indexing: Discovery what your files are about
+# File Indexing: Discover what your files are about
 
 This blog demonstrates how to index PDF, Images, DOCx or TXT files using Python code, Generative AI models and Oracle 23ai database
 
@@ -223,8 +223,9 @@ This blog demonstrates how to index PDF, Images, DOCx or TXT files using Python 
   
   ### Playing with questions:  
   
-  - **"Which documents talk about brazilian beaches?"**  
+  - **"Which documents talk about brazilian branches?"**  
     ![T03_01](images/Question2_result.png "T03_01")  
+    >**Note**: We mistakenly used the word “branches” instead of “beaches”, but the model still adapted.  
 
   - **"List test results from August 2025"**  
     ![T03_01](images/Question3_result.png "T03_01")  
